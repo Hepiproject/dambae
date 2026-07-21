@@ -759,7 +759,11 @@
   const audioState={ lit:false, draw:false };
   function initAudio(){
     if (audioReady) return; const Ctx=window.AudioContext||window.webkitAudioContext; if (!Ctx) return;
-    AC=new Ctx(); master=AC.createGain(); master.gain.value=muted?0:0.9; master.connect(AC.destination);
+    AC=new Ctx(); master=AC.createGain(); master.gain.value=muted?0:0.72;
+    // 마스터 리미터 — 소리 겹칠 때 클리핑(찌그러짐) 방지(녹화 시 음질 깨짐 대응)
+    const limiter=AC.createDynamicsCompressor();
+    limiter.threshold.value=-3; limiter.knee.value=0; limiter.ratio.value=20; limiter.attack.value=0.003; limiter.release.value=0.25;
+    master.connect(limiter); limiter.connect(AC.destination);
     noiseBuf=AC.createBuffer(1,Math.floor(AC.sampleRate*2),AC.sampleRate);
     const d=noiseBuf.getChannelData(0); for (let i=0;i<d.length;i++) d[i]=Math.random()*2-1;
     const src=AC.createBufferSource(); src.buffer=noiseBuf; src.loop=true;
