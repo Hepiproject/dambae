@@ -136,6 +136,12 @@
   (function(){ grain.width=256; grain.height=256; const g=grain.getContext("2d"); const im=g.createImageData(256,256); const p=im.data;
     for(let i=0;i<p.length;i+=4){ const v=Math.random()*255; p[i]=p[i+1]=p[i+2]=v; p[i+3]=255; } g.putImageData(im,0,0); grainReady=true; })();
   const stars=[]; const grainOff={x:0,y:0}; let sceneT=0;
+  // 연기 스프라이트(부하↓): 입자마다 createRadialGradient 대신 캐시된 소프트 스프라이트를 drawImage
+  const smokeSprite=document.createElement("canvas");
+  (function(){ smokeSprite.width=smokeSprite.height=64; const c=smokeSprite.getContext("2d"); const g=c.createRadialGradient(32,32,0,32,32,32);
+    g.addColorStop(0,"rgba(216,222,230,1)"); g.addColorStop(0.5,"rgba(198,206,220,0.5)"); g.addColorStop(1,"rgba(188,196,212,0)"); c.fillStyle=g; c.fillRect(0,0,64,64); })();
+  // 달 캐시(부하↓): 정적인 달 표면(디스크·마리아·크레이터)을 한 번만 그려 blit
+  const moonCanvas=document.createElement("canvas"); let moonCacheR=0;
   // 절차적 구름(fBm 노이즈, 해상도 무관) — x축 이음매 없는 텍스처
   const cloudTex=document.createElement("canvas"); let cloudReady=false;
   function chash(ix,iy){ let n=(ix*73856093)^(iy*19349663); n=(n^(n>>13))*1274126177; return ((n^(n>>16))>>>0)/4294967295; }
@@ -215,7 +221,7 @@
 
   // --- 파티클 -----------------------------------------------------
   const smoke=[], sparks=[], ashBits=[], pile=[];
-  const MAX_SMOKE = 1500;
+  const MAX_SMOKE = 800;
   let haze = 0;
 
   function addSmoke(x,y,o){
@@ -244,7 +250,7 @@
 
   // 뱉기: 화면 전체로 빠르게·자욱하게 퍼짐
   function exhale(strength){
-    const n = Math.min(360, 150 + strength*1.6);
+    const n = Math.min(220, 90 + strength*1.2);
     for (let i=0;i<n;i++){
       const ang=Math.random()*Math.PI*2, sp=160+Math.random()*520;   // 초기 속도↑ = 빠른 확산
       addSmoke(MOUTH.x+(Math.random()-0.5)*130, MOUTH.y+(Math.random()-0.5)*60, {
@@ -355,7 +361,7 @@
       if (ashLen>cig.hwNear*7){ const chunk=ashLen-cig.hwNear*2; spawnAsh(6+(chunk/4|0),cig.dTop-chunk,chunk); cig.dTop-=chunk; }
 
       const e=emberWorld();
-      const rateAmb = reduced?14:72;
+      const rateAmb = reduced?14:44;
       ambientAcc += dt*rateAmb*(cig.drawing?0.4:1);
       const sway = Math.sin(t*1.7)*cig.hwNear*0.6 + Math.sin(t*3.3)*cig.hwNear*0.25;
       while (ambientAcc>=1){ ambientAcc-=1;
@@ -402,30 +408,32 @@
 
   // --- 렌더 -------------------------------------------------------
   // 사진 속 저해상도 달 위에 사실적인 달을 그려 덮음(부드러운 마리아·미세 텍스처)
+  function buildMoonCache(){
+    const r=bg.moonR; if(r<=0) return; moonCacheR=r;
+    const SS=2, R=r*SS, P=Math.max(2,Math.ceil(2*R));
+    moonCanvas.width=P; moonCanvas.height=P;
+    const c=moonCanvas.getContext("2d"); const mx=R,my=R;
+    c.clearRect(0,0,P,P); c.save(); c.beginPath(); c.arc(mx,my,R,0,7); c.clip();
+    const md=c.createRadialGradient(mx-R*0.2,my-R*0.22,R*0.15,mx,my,R*1.1);
+    md.addColorStop(0,"#f6f4ec"); md.addColorStop(0.7,"#e8e4d8"); md.addColorStop(1,"#d0ccbf");
+    c.fillStyle=md; c.fillRect(0,0,P,P);
+    const mare=(dx,dy,rr,al)=>{ const g=c.createRadialGradient(mx+dx*R,my+dy*R,0,mx+dx*R,my+dy*R,rr*R);
+      g.addColorStop(0,`rgba(118,116,108,${al})`); g.addColorStop(0.65,`rgba(128,126,118,${al*0.45})`); g.addColorStop(1,"rgba(140,138,130,0)");
+      c.fillStyle=g; c.fillRect(0,0,P,P); };
+    mare(-0.16,-0.26,0.52,0.17); mare(0.20,-0.06,0.40,0.14); mare(0.06,0.30,0.46,0.15); mare(-0.36,0.12,0.30,0.11); mare(0.36,0.30,0.28,0.10);
+    for(let i=0;i<58;i++){ const ang=i*2.399, rad=Math.sqrt(((i*41)%100)/100)*R*0.95, cx2=mx+Math.cos(ang)*rad, cy2=my+Math.sin(ang)*rad, s=R*(0.008+((i*53)%50)/50*0.03), a=0.05+((i*29)%40)/40*0.08;
+      c.fillStyle=`rgba(115,112,104,${a})`; c.beginPath(); c.arc(cx2,cy2,s,0,7); c.fill();
+      c.fillStyle=`rgba(252,250,242,${a*0.4})`; c.beginPath(); c.arc(cx2-s*0.3,cy2-s*0.3,s*0.6,0,7); c.fill(); }
+    const limb=c.createRadialGradient(mx,my,R*0.68,mx,my,R); limb.addColorStop(0,"rgba(0,0,0,0)"); limb.addColorStop(1,"rgba(58,55,49,0.34)");
+    c.fillStyle=limb; c.fillRect(0,0,P,P); c.restore();
+  }
   function drawMoon(){
     const mx=bg.moonX, my=bg.moonY, r=bg.moonR;
-    // 은은한 달무리
+    if (moonCacheR!==r) buildMoonCache();
     const halo=ctx.createRadialGradient(mx,my,r*0.6,mx,my,r*2.8);
     halo.addColorStop(0,"rgba(230,232,240,0.12)"); halo.addColorStop(0.5,"rgba(208,214,228,0.035)"); halo.addColorStop(1,"rgba(208,214,228,0)");
     ctx.fillStyle=halo; ctx.beginPath(); ctx.arc(mx,my,r*2.8,0,7); ctx.fill();
-    ctx.save(); ctx.beginPath(); ctx.arc(mx,my,r,0,7); ctx.clip();
-    // 디스크
-    const md=ctx.createRadialGradient(mx-r*0.2,my-r*0.22,r*0.15,mx,my,r*1.1);
-    md.addColorStop(0,"#f6f4ec"); md.addColorStop(0.7,"#e8e4d8"); md.addColorStop(1,"#d0ccbf");
-    ctx.fillStyle=md; ctx.fillRect(mx-r,my-r,r*2,r*2);
-    // 마리아(어두운 바다) — 부드러운 그라디언트, 낮은 대비
-    function mare(dx,dy,rr,al){ const g=ctx.createRadialGradient(mx+dx*r,my+dy*r,0,mx+dx*r,my+dy*r,rr*r);
-      g.addColorStop(0,`rgba(118,116,108,${al})`); g.addColorStop(0.65,`rgba(128,126,118,${al*0.45})`); g.addColorStop(1,"rgba(140,138,130,0)");
-      ctx.fillStyle=g; ctx.fillRect(mx-r,my-r,r*2,r*2); }
-    mare(-0.16,-0.26,0.52,0.17); mare(0.20,-0.06,0.40,0.14); mare(0.06,0.30,0.46,0.15); mare(-0.36,0.12,0.30,0.11); mare(0.36,0.30,0.28,0.10);
-    // 미세 크레이터(결정적)
-    for(let i=0;i<58;i++){ const ang=i*2.399, rad=Math.sqrt(((i*41)%100)/100)*r*0.95, cx2=mx+Math.cos(ang)*rad, cy2=my+Math.sin(ang)*rad, s=r*(0.008+((i*53)%50)/50*0.03), a=0.05+((i*29)%40)/40*0.08;
-      ctx.fillStyle=`rgba(115,112,104,${a})`; ctx.beginPath(); ctx.arc(cx2,cy2,s,0,7); ctx.fill();
-      ctx.fillStyle=`rgba(252,250,242,${a*0.4})`; ctx.beginPath(); ctx.arc(cx2-s*0.3,cy2-s*0.3,s*0.6,0,7); ctx.fill(); }
-    // 림 다크닝
-    const limb=ctx.createRadialGradient(mx,my,r*0.68,mx,my,r); limb.addColorStop(0,"rgba(0,0,0,0)"); limb.addColorStop(1,"rgba(58,55,49,0.34)");
-    ctx.fillStyle=limb; ctx.fillRect(mx-r,my-r,r*2,r*2);
-    ctx.restore();
+    ctx.drawImage(moonCanvas, mx-r, my-r, r*2, r*2);
   }
 
   // 구름 2겹(패럴랙스) — 날씨별 색은 cloudDraw(tint)로
@@ -726,18 +734,16 @@
   }
   function drawSmoke(){
     if (haze>0.002){ ctx.fillStyle="rgba(200,206,216,"+Math.min(0.17,haze*0.15).toFixed(3)+")"; ctx.fillRect(0,0,W,H); }
+    ctx.save();
     for (const p of smoke){
       const la=Math.min(1,p.age/p.life);
       const a=p.alpha*Math.sin(la*Math.PI);
       if (a<0.003) continue;
       const bf=p.bright*(0.55+0.45*(1-la));
-      const col=(140+bf*95)|0, c2=(col+16)|0;
-      const g=ctx.createRadialGradient(p.x,p.y,0,p.x,p.y,p.r);
-      g.addColorStop(0,`rgba(${c2},${c2},${(c2+8)|0},${a})`);
-      g.addColorStop(0.5,`rgba(${col},${(col+4)|0},${(col+12)|0},${a*0.5})`);
-      g.addColorStop(1,"rgba(150,158,172,0)");
-      ctx.fillStyle=g; ctx.beginPath(); ctx.arc(p.x,p.y,p.r,0,7); ctx.fill();
+      ctx.globalAlpha=Math.min(1, a*bf*1.7);
+      const d=p.r*2; ctx.drawImage(smokeSprite, p.x-p.r, p.y-p.r, d, d);
     }
+    ctx.restore();
   }
 
   // --- 오디오 -----------------------------------------------------
@@ -928,7 +934,7 @@
     if (AC.state!=="running"){ try{ AC.resume(); }catch(e){} }
     const tg=audioState.draw?0.14:(audioState.lit?0.02:0);
     drawGain.gain.setTargetAtTime(tg,AC.currentTime,0.08);
-    if (!muted && audioState.lit){ const rate=audioState.draw?32:8; if (Math.random()<dt*rate) crackle(); }
+    if (!muted && audioState.lit){ const rate=audioState.draw?14:5; if (Math.random()<dt*rate) crackle(); }
     updateAmbient(dt);
   }
 
