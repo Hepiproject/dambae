@@ -1,0 +1,1042 @@
+<title>담배 한 대</title>
+<style>
+  :root { --ink:#8b93a6; --ink-dim:#4b5266; --ember:#ff7a2c; }
+  * { box-sizing: border-box; }
+  html, body {
+    margin:0; padding:0; height:100%; overflow:hidden; background:#05070d; color:var(--ink);
+    font-family: Georgia, "Times New Roman", serif; -webkit-font-smoothing:antialiased;
+    touch-action:none; cursor:pointer;
+  }
+  #stage { position:fixed; inset:0; width:100vw; height:100vh; display:block; }
+  .hud { position:fixed; inset:0; pointer-events:none; z-index:2; }
+
+  .hint {
+    position:absolute; left:0; right:0; top:50%; transform:translateY(-50%); text-align:center;
+    font-size:clamp(12px,1.7vw,18px); letter-spacing:0.28em; text-transform:uppercase;
+    color:#dbe0e8; opacity:0.9; transition:opacity 1.2s ease; padding:0 28px; line-height:2;
+    text-shadow:0 2px 16px rgba(0,0,0,0.95);
+  }
+  .hint.gone { opacity:0; }
+  .hint b { font-weight:normal; color:#fff; }
+
+  .count {
+    position:absolute; top:clamp(18px,4vh,38px); right:clamp(18px,4vw,42px);
+    font-family:"SFMono-Regular",ui-monospace,Menlo,Consolas,monospace; font-size:12px;
+    letter-spacing:0.22em; text-transform:uppercase; color:var(--ink-dim); text-align:right; line-height:1.7;
+    text-shadow:0 1px 8px rgba(0,0,0,0.8);
+  }
+  .count .n { color:#c3cad8; font-size:15px; }
+
+  .picker { position:absolute; top:clamp(18px,4vh,38px); left:clamp(18px,4vw,42px); pointer-events:auto; }
+  .pick-btn {
+    cursor:pointer; background:rgba(10,14,22,0.5); border:1px solid #2a3040; color:#c3cad8;
+    font-family:Georgia,serif; font-size:13px; letter-spacing:0.14em; padding:9px 15px;
+    transition:border-color .2s, color .2s; backdrop-filter:blur(3px);
+  }
+  .pick-btn:hover { border-color:var(--ember); color:#ffd9b0; }
+  .pick-btn:focus-visible { outline:2px solid var(--ember); outline-offset:2px; }
+  .menu {
+    margin-top:6px; display:flex; flex-direction:column; min-width:150px;
+    border:1px solid #2a3040; background:rgba(8,11,18,0.94); backdrop-filter:blur(4px);
+  }
+  .menu[hidden] { display:none; }
+  .menu button {
+    cursor:pointer; background:transparent; border:none; color:#98a0b2; text-align:left;
+    font-family:Georgia,serif; font-size:13px; letter-spacing:0.12em; padding:11px 15px;
+    border-bottom:1px solid rgba(42,48,64,0.5); transition:background .15s, color .15s;
+  }
+  .menu button:last-child { border-bottom:none; }
+  .menu button:hover { background:rgba(255,122,44,0.12); color:#ffd9b0; }
+  .menu button.active { color:#ffd9b0; }
+  .menu button:focus-visible { outline:1px solid var(--ember); outline-offset:-1px; }
+
+  .weather {
+    position:absolute; bottom:clamp(18px,4vh,38px); right:clamp(18px,4vw,42px);
+    display:flex; gap:6px; pointer-events:auto;
+  }
+  .wbtn {
+    cursor:pointer; background:rgba(10,14,22,0.5); border:1px solid #2a3040; color:#98a0b2;
+    font-family:Georgia,serif; font-size:13px; letter-spacing:0.1em; padding:8px 15px;
+    backdrop-filter:blur(3px); transition:border-color .2s, color .2s;
+  }
+  .wbtn:hover { color:#c3cad8; }
+  .wbtn.active { border-color:var(--ember); color:#ffd9b0; }
+  .wbtn:focus-visible { outline:2px solid var(--ember); outline-offset:2px; }
+
+  .mute {
+    position:absolute; bottom:clamp(18px,4vh,38px); left:clamp(18px,4vw,42px); pointer-events:auto;
+    cursor:pointer; background:transparent; border:none;
+    font-family:"SFMono-Regular",ui-monospace,Menlo,Consolas,monospace; font-size:11px;
+    letter-spacing:0.22em; text-transform:uppercase; color:var(--ink-dim); padding:6px 4px; transition:color .25s ease;
+    text-shadow:0 1px 8px rgba(0,0,0,0.8);
+  }
+  .mute:hover { color:#c3cad8; }
+  .mute.off { color:#2a3040; }
+  .mute:focus-visible { outline:1px solid var(--ember); outline-offset:3px; }
+
+  @media (prefers-reduced-motion: reduce) { .hint { transition:none; } }
+</style>
+
+<canvas id="stage"></canvas>
+<div class="hud">
+  <div class="picker" id="picker">
+    <button class="pick-btn" id="pickBtn" aria-haspopup="true" aria-expanded="false">담배 선택 · 에쎄</button>
+    <div class="menu" id="menu" hidden>
+      <button data-t="esse" class="active">에쎄</button>
+      <button data-t="masse">마쎄</button>
+      <button data-t="marlboro">말보로</button>
+      <button data-t="cigar">시가</button>
+    </div>
+  </div>
+  <div class="weather" id="weather">
+    <button data-w="night" class="wbtn active">밤</button>
+    <button data-w="day" class="wbtn">낮</button>
+    <button data-w="rain" class="wbtn">비</button>
+    <button data-w="snow" class="wbtn">눈</button>
+  </div>
+  <div class="count"><span class="n" id="puffs">0</span><br>모금</div>
+  <div class="hint" id="hint"><b>아래로 긁어</b> 담뱃불 붙이기</div>
+  <button class="mute" id="mute" aria-label="소리 켜고 끄기">소리 켜짐</button>
+</div>
+
+<script>
+(() => {
+  "use strict";
+  const canvas = document.getElementById("stage");
+  const ctx = canvas.getContext("2d", { alpha: false });
+  const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  const TYPES = {
+    esse:     { label:"에쎄",   wNear:15, lenK:0.84, filterK:0.30, wrap:"paper", filter:"white", band:null,     burn:1.05 },
+    masse:    { label:"마쎄",   wNear:23, lenK:0.82, filterK:0.28, wrap:"paper", filter:"white", band:"silver", logo:"#2b6fd6", burn:1.0 },
+    marlboro: { label:"말보로", wNear:38, lenK:0.80, filterK:0.26, wrap:"paper", filter:"cork",  band:"gold",   burn:0.9 },
+    cigar:    { label:"시가",   wNear:60, lenK:0.80, filterK:0.14, wrap:"cigar", filter:"cap",   band:"cigar",  burn:0.45 },
+  };
+  const TAPER = 0.18;
+
+  let W=0, H=0, DPR=1;
+  const F = { x:0, y:0 };          // 담배 밑동
+  const MOUTH = { x:0, y:0 };
+  const tray = {};
+  const sc = { ox:0, oy:0, a:0 };
+
+  const cig = {
+    type:"esse", L:400, hwNear:8, filterLen:90, angle:-0.12,
+    dBurn:null, dTop:null, drawing:false, holdMs:0, heat:0, flick:Math.random()*6,
+    pull:0, done:false, lit:false,
+  };
+  let flare=0;   // 불 붙일 때 불꽃 플레어
+
+  // 실사 밤하늘 배경(사진 임베드)
+  const BG = "data:image/jpeg;base64,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";
+  const bgImg = new Image(); let bgReady=false; bgImg.onload=()=>{bgReady=true;}; bgImg.src=BG;
+  const bg = { dx:0, dy:0, D:0, moonX:0, moonY:0 };
+  // 선명도 보강: 필름 그레인 + 또렷한 별
+  const grain=document.createElement("canvas"); let grainReady=false;
+  (function(){ grain.width=256; grain.height=256; const g=grain.getContext("2d"); const im=g.createImageData(256,256); const p=im.data;
+    for(let i=0;i<p.length;i+=4){ const v=Math.random()*255; p[i]=p[i+1]=p[i+2]=v; p[i+3]=255; } g.putImageData(im,0,0); grainReady=true; })();
+  const stars=[]; const grainOff={x:0,y:0}; let sceneT=0;
+  // 절차적 구름(fBm 노이즈, 해상도 무관) — x축 이음매 없는 텍스처
+  const cloudTex=document.createElement("canvas"); let cloudReady=false;
+  function chash(ix,iy){ let n=(ix*73856093)^(iy*19349663); n=(n^(n>>13))*1274126177; return ((n^(n>>16))>>>0)/4294967295; }
+  function vnoise(x,y,gx){ const x0=Math.floor(x),y0=Math.floor(y),fx=x-x0,fy=y-y0,ux=fx*fx*(3-2*fx),uy=fy*fy*(3-2*fy);
+    const X0=((x0%gx)+gx)%gx,X1=(((x0+1)%gx)+gx)%gx;
+    const a=chash(X0,y0)+(chash(X1,y0)-chash(X0,y0))*ux, b=chash(X0,y0+1)+(chash(X1,y0+1)-chash(X0,y0+1))*ux; return a+(b-a)*uy; }
+  function buildClouds(){
+    const cw=768,ch=384; cloudTex.width=cw; cloudTex.height=ch;
+    const c=cloudTex.getContext("2d"); const im=c.createImageData(cw,ch); const p=im.data; const OCT=6,GX0=6;
+    for(let y=0;y<ch;y++){ const env=Math.pow(Math.sin(Math.max(0,Math.min(1,y/ch))*Math.PI),0.4);
+      for(let x=0;x<cw;x++){ let v=0,amp=0.5;
+        for(let o=0;o<OCT;o++){ const cells=GX0<<o; v+=amp*vnoise(x/cw*cells, y/cw*cells*1.6+o*7.3, cells); amp*=0.5; }
+        let d=Math.max(0,(v-0.32)/0.5); d=Math.pow(d,1.15);
+        const idx=(y*cw+x)*4; p[idx]=255;p[idx+1]=255;p[idx+2]=255; p[idx+3]=Math.min(1,d*2.6)*env*225; } }
+    c.putImageData(im,0,0); cloudReady=true;
+  }
+  buildClouds();
+  // 날씨별 구름 색(흰 텍스처에 색 입힘) + 빗방울 + 날씨 상태
+  const cloudDraw=document.createElement("canvas");
+  function tintClouds(r,g,b){ cloudDraw.width=cloudTex.width; cloudDraw.height=cloudTex.height; const c=cloudDraw.getContext("2d");
+    c.clearRect(0,0,cloudDraw.width,cloudDraw.height); c.drawImage(cloudTex,0,0); c.globalCompositeOperation="source-in"; c.fillStyle="rgb("+(r|0)+","+(g|0)+","+(b|0)+")"; c.fillRect(0,0,cloudDraw.width,cloudDraw.height); }
+  tintClouds(168,178,200);
+  let weather="night";
+  const rain=[];
+  function buildRain(){ rain.length=0; const n=Math.floor(W*H/2500); for(let i=0;i<n;i++) rain.push({ x:Math.random()*W*1.2-W*0.1, y:Math.random()*H, len:12+Math.random()*22, sp:680+Math.random()*520 }); }
+  const snow=[];
+  function buildSnow(){ snow.length=0; const n=Math.floor(W*H/5500); for(let i=0;i<n;i++) snow.push({ x:Math.random()*W, y:Math.random()*H, r:1+Math.random()*2.4, sp:30+Math.random()*70, sway:16+Math.random()*30, fr:0.6+Math.random()*1.2, ph:Math.random()*10, wind:5+Math.random()*10, a:0.45+Math.random()*0.5 }); }
+
+  function resize() {
+    DPR = Math.min(window.devicePixelRatio || 1, 2);
+    W = window.innerWidth; H = window.innerHeight;
+    canvas.width = Math.floor(W*DPR); canvas.height = Math.floor(H*DPR);
+    canvas.style.width = W+"px"; canvas.style.height = H+"px";
+    ctx.setTransform(DPR,0,0,DPR,0,0);
+    layout();
+  }
+
+  function layout() {
+    const t = TYPES[cig.type];
+    const s = Math.min(W,H);
+    const k = Math.max(0.9, Math.min(s/620, 2.0));
+    cig.hwNear = (t.wNear*k)/2;
+    // 배경 커버 변환 + 달 위치(사진 내 정규화 좌표)
+    const ZOOM=1.55, MX=0.562, MY=0.292, SX=0.5, SY=0.3;   // MX,MY=사진 속 달 중심 / SX,SY=화면 목표
+    const D=Math.max(W,H)*ZOOM; bg.D=D;
+    bg.dx=Math.max(W-D, Math.min(0, SX*W - MX*D));
+    bg.dy=Math.max(H-D, Math.min(0, SY*H - MY*D));
+    bg.moonX=bg.dx+MX*D; bg.moonY=bg.dy+MY*D; bg.moonR=D*0.048;
+    // 담배: 좌하단에서 손에 쥔 듯 낮고 완만한 각도(1인칭 흡연 시점). 연기는 불씨→달로 상승
+    F.x = W*0.25; F.y = H*1.0;
+    MOUTH.x = W*0.42; MOUTH.y = H*0.99;
+    const eTx = bg.moonX - W*0.04, eTy = bg.moonY + Math.max(140, H*0.26);
+    const dxv = eTx-F.x, dyv = eTy-F.y;
+    cig.L = Math.max(240, Math.hypot(dxv,dyv));
+    cig.angle = Math.atan2(-dxv, -dyv);
+    cig.filterLen = cig.L*t.filterK;
+
+    tray.cx = W*0.2; tray.cy = H*0.9;
+    tray.rimRx = Math.max(64, Math.min(W*0.15, 150));
+    tray.rimRy = tray.rimRx*0.34;
+    tray.innerRx = tray.rimRx*0.72; tray.innerRy = tray.rimRy*0.68;
+    tray.wallH = tray.rimRy*1.4;
+
+    stars.length=0; const sn=Math.floor(W*H/9000);
+    for(let i=0;i<sn;i++) stars.push({ x:Math.random()*W, y:Math.random()*H*0.66, r:Math.random()*1.1+0.3, b:0.22+Math.random()*0.5, tw:1+Math.random()*3, ph:Math.random()*6 });
+    buildRain(); buildSnow();
+
+    if (cig.dBurn == null) { cig.dBurn = cig.L; cig.dTop = cig.L; cig.lit = false; }
+  }
+
+  function hwAt(d){ return cig.hwNear*(1 - TAPER*(d/cig.L)); }
+  function worldAt(lx,ly){
+    const ca=Math.cos(sc.a), sa=Math.sin(sc.a);
+    return { x: sc.ox + lx*ca + ly*sa, y: sc.oy - lx*sa + ly*ca };
+  }
+  const emberWorld = () => worldAt(0,-cig.dBurn);
+
+  // --- 파티클 -----------------------------------------------------
+  const smoke=[], sparks=[], ashBits=[], pile=[];
+  const MAX_SMOKE = 1500;
+  let haze = 0;
+
+  function addSmoke(x,y,o){
+    if (smoke.length>MAX_SMOKE) return;
+    const jit=o.jit ?? 3;
+    smoke.push({
+      x,y,
+      vx:(o.vx0??0)+(Math.random()-0.5)*jit,
+      vy:(o.vy0??-70)+(Math.random()-0.5)*jit,
+      r:(o.r0??2)*(0.7+Math.random()*0.7),
+      maxR:(o.maxR??16)*(0.7+Math.random()*0.7),
+      seed:Math.random()*1000, age:0,
+      life:(o.life??6)*(0.7+Math.random()*0.6),
+      alpha:o.alpha??0.05, buoy:o.buoy??20,
+      turb:o.turb??1, bright:o.bright??1, rise:o.rise??0.6,
+    });
+  }
+
+  // clips.mp4 느낌: 얇게 올라가다 위로 갈수록 소용돌이
+  function curl(x,y,t){
+    return {
+      x: Math.sin(x*0.021 + t*0.6) + Math.cos(y*0.017 - t*0.4),
+      y: (Math.cos(x*0.016 - t*0.5) + Math.sin(y*0.023 + t*0.5))*0.4,
+    };
+  }
+
+  // 뱉기: 화면 전체로 빠르게·자욱하게 퍼짐
+  function exhale(strength){
+    const n = Math.min(360, 150 + strength*1.6);
+    for (let i=0;i<n;i++){
+      const ang=Math.random()*Math.PI*2, sp=160+Math.random()*520;   // 초기 속도↑ = 빠른 확산
+      addSmoke(MOUTH.x+(Math.random()-0.5)*130, MOUTH.y+(Math.random()-0.5)*60, {
+        vx0:Math.cos(ang)*sp, vy0:Math.sin(ang)*sp*0.7 - 70,
+        r0:22, maxR:180+Math.random()*190, life:8.5+Math.random()*3.5,
+        alpha:0.045, buoy:5, turb:0.7, bright:0.8, rise:0.18, jit:40,
+      });
+    }
+    haze = Math.min(1.2, haze + 0.55 + Math.min(strength,140)*0.004);
+  }
+
+  function addSpark(x,y){
+    sparks.push({ x,y, vx:(Math.random()-0.5)*30, vy:-24-Math.random()*54,
+      age:0, life:0.5+Math.random()*0.7, r:0.7+Math.random()*1.5 });
+  }
+
+  function spawnAsh(count, fromD, len){
+    for (let i=0;i<count;i++){
+      const p = worldAt((Math.random()-0.5)*cig.hwNear, -(fromD+Math.random()*len));
+      ashBits.push({ x:p.x, y:p.y, vx:(Math.random()-0.5)*18, vy:2+Math.random()*10,
+        r:1.2+Math.random()*2.4, age:0, life:2.6+Math.random()*2.2, vr:(Math.random()-0.5)*5, rot:Math.random()*6 });
+    }
+  }
+  function settle(b){
+    const dx=Math.max(-tray.innerRx, Math.min(tray.innerRx, b.x-tray.cx));
+    pile.push({ x:tray.cx+dx, y:tray.cy+(Math.random()-0.5)*tray.innerRy, r:b.r, sh:0.28+Math.random()*0.32 });
+    if (pile.length>300) pile.shift();
+  }
+
+  // --- 재털기: 재떨이로 이동→탁→복귀 ------------------------------
+  let tapT=-1, tapAshDone=false, tapAngle=0.7;
+  const tapBase = { x:0, y:0 };
+  const TAP_A=0.5, TAP_B=1.05, TAP_D=1.75;
+  const smooth = (x)=>{ x=Math.max(0,Math.min(1,x)); return x*x*(3-2*x); };
+  function tap(){
+    if (tapT>=0 || tossT>=0 || cig.done || !cig.lit) return;
+    tapAngle = cig.angle + 0.72;
+    const hover = cig.hwNear*3 + 12;
+    const ex = tray.cx, ey = tray.cy - hover;
+    tapBase.x = ex + cig.dBurn*Math.sin(tapAngle);
+    tapBase.y = ey + cig.dBurn*Math.cos(tapAngle);
+    tapT=0; tapAshDone=false;
+  }
+
+  // --- 다 피면 꽁초를 재떨이로 던지기 -----------------------------
+  let tossT=-1; const tossFrom={x:0,y:0,a:0}, tossTo={x:0,y:0,a:0}, butts=[]; const TOSS_D=0.95;
+  function startToss(){
+    tossFrom.x=F.x; tossFrom.y=F.y+cig.pull*24; tossFrom.a=cig.angle;
+    tossTo.x=tray.cx + (Math.sin(butts.length*2.3))*tray.rimRx*0.32;
+    tossTo.y=tray.cy - 2;
+    tossTo.a=Math.PI*0.5 + 0.28;   // 거의 수평으로 눕힘
+    tossT=0; tapT=-1;
+  }
+
+  // --- 업데이트 ---------------------------------------------------
+  let ambientAcc=0;
+  function update(dt,t){
+    sceneT=t; grainOff.x=Math.random()*256; grainOff.y=Math.random()*256;
+    cig.pull += ((cig.drawing?1:0)-cig.pull)*Math.min(1,dt*8);
+
+    let travel=0, jerk=0;
+    if (tapT>=0){
+      tapT += dt;
+      if (tapT<TAP_A) travel=smooth(tapT/TAP_A);
+      else if (tapT<TAP_B) travel=1;
+      else travel=1-smooth((tapT-TAP_B)/(TAP_D-TAP_B));
+      if (tapT>=TAP_A && tapT<TAP_B){ const u=(tapT-TAP_A)/(TAP_B-TAP_A); jerk=0.2*Math.sin(u*Math.PI*6)*(1-u); }
+      if (tapT>=TAP_D) tapT=-1;
+    }
+    sc.a = cig.angle + (tapAngle-cig.angle)*travel + jerk;
+    sc.ox = F.x + (tapBase.x-F.x)*travel;
+    sc.oy = F.y + cig.pull*24 + (tapBase.y-F.y)*travel;
+
+    // 꽁초 던지기(포물선 → 재떨이에 눕힘)
+    if (tossT>=0){
+      tossT+=dt; const p=Math.min(1,tossT/TOSS_D), e=smooth(p);
+      sc.ox=tossFrom.x+(tossTo.x-tossFrom.x)*e;
+      sc.oy=tossFrom.y+(tossTo.y-tossFrom.y)*e - Math.sin(p*Math.PI)*H*0.1;
+      sc.a=tossFrom.a+(tossTo.a-tossFrom.a)*e;
+      if (tossT>=TOSS_D){
+        butts.push({ x:tossTo.x, y:tossTo.y, a:tossTo.a, hw:cig.hwNear, fl:cig.filterLen*0.95, L:cig.filterLen*1.7, cork:TYPES[cig.type].filter==="cork" });
+        if (butts.length>7) butts.shift();
+        hissSound();   // 치이익 — 재떨이에 눕혀 꺼짐
+        tossT=-1; cig.dBurn=null; cig.done=false; cig.heat=0; cig.drawing=false; cig.holdMs=0; cig.lit=false; layout();
+        hint.innerHTML=LIGHT_HINT; hint.classList.remove("gone"); hinted=false;   // 새 담배 점화 안내
+      }
+    }
+
+    if (tapT>=TAP_A && !tapAshDone){
+      const len=cig.dTop-cig.dBurn;
+      if (len>1.5){ spawnAsh(12+(len/4|0), cig.dBurn, len); cig.dTop=cig.dBurn; }
+      tapAshDone=true; tapSound();
+    }
+
+    const target = (!cig.lit||cig.done)?0:(cig.drawing?1:0.42);
+    cig.heat += (target-cig.heat)*Math.min(1,dt*6);
+    cig.flick += dt*(cig.drawing?26:12);
+    flare = Math.max(0, flare-dt*1.7);
+
+    if (cig.lit && !cig.done){
+      if (cig.drawing) cig.holdMs += dt*1000;
+      const span=cig.L-cig.filterLen;
+      const idle=span/300*TYPES[cig.type].burn;
+      cig.dBurn -= idle*(cig.drawing?9:1)*dt;
+      if (cig.dBurn<=cig.filterLen){ cig.dBurn=cig.filterLen; cig.done=true; cig.drawing=false; startToss(); }
+      // 안 털어도 재가 길게 쌓이면 저절로 툭 떨어짐(자연 낙하)
+      const ashLen=cig.dTop-cig.dBurn;
+      if (ashLen>cig.hwNear*7){ const chunk=ashLen-cig.hwNear*2; spawnAsh(6+(chunk/4|0),cig.dTop-chunk,chunk); cig.dTop-=chunk; }
+
+      const e=emberWorld();
+      const rateAmb = reduced?14:72;
+      ambientAcc += dt*rateAmb*(cig.drawing?0.4:1);
+      const sway = Math.sin(t*1.7)*cig.hwNear*0.6 + Math.sin(t*3.3)*cig.hwNear*0.25;
+      while (ambientAcc>=1){ ambientAcc-=1;
+        addSmoke(e.x+sway+(Math.random()-0.5)*2, e.y, { vy0:-72, jit:1.5, r0:2, maxR:15, life:6, alpha:0.05, buoy:20, turb:1, bright:1, rise:0.7 });
+      }
+      if (cig.drawing && !reduced && Math.random()<dt*34) addSpark(e.x,e.y);
+    }
+    audioState.lit=cig.lit&&!cig.done; audioState.draw=cig.drawing;
+
+    for (let i=smoke.length-1;i>=0;i--){
+      const p=smoke[i]; p.age+=dt;
+      if (p.age>=p.life){ smoke.splice(i,1); continue; }
+      const k=reduced?0.4:1;
+      const ageK=Math.min(1,p.age/p.rise);        // 상승 후 난류 개입(아래는 곧게, 위는 소용돌이)
+      const c=curl(p.x,p.y,t);
+      p.vy -= p.buoy*dt;
+      p.vx += c.x*(3+52*ageK)*p.turb*dt*k;
+      p.vy += c.y*(2+26*ageK)*p.turb*dt*k;
+      p.vx*=0.985; p.vy*=0.99;
+      p.x+=p.vx*dt; p.y+=p.vy*dt;
+      p.r += (p.maxR-p.r)*dt*0.5;
+    }
+    haze = Math.max(0, haze - dt*0.3);
+    for (let i=sparks.length-1;i>=0;i--){
+      const s=sparks[i]; s.age+=dt;
+      if (s.age>=s.life){ sparks.splice(i,1); continue; }
+      s.vy+=30*dt; s.vx*=0.98; s.x+=s.vx*dt; s.y+=s.vy*dt;
+    }
+    for (let i=ashBits.length-1;i>=0;i--){
+      const b=ashBits[i]; b.age+=dt; b.vy+=46*dt; b.vx*=0.985; b.x+=b.vx*dt; b.y+=b.vy*dt; b.rot+=b.vr*dt;
+      const overTray = Math.abs(b.x-tray.cx)<tray.rimRx*0.95;
+      if (b.vy>0 && b.y>=tray.cy && overTray){ settle(b); ashBits.splice(i,1); }   // 재떨이 위면 쌓임
+      else if (b.age>=b.life){ ashBits.splice(i,1); }                              // 아니면 공중에서 사그라듦
+    }
+    // 비: 빗방울 낙하(대각선)
+    if(weather==="rain"){ for(const d of rain){ d.y += d.sp*dt; d.x += d.sp*dt*0.26;
+      if(d.y>H+d.len){ d.y=-d.len-Math.random()*40; d.x=Math.random()*W*1.2-W*0.1; }
+      if(d.x>W+30) d.x-=W*1.25; } }
+    // 눈: 천천히 흔들리며 낙하
+    if(weather==="snow"){ for(const f of snow){ f.y += f.sp*dt; f.x += Math.sin((sceneT+f.ph)*f.fr)*f.sway*dt + f.wind*dt;
+      if(f.y>H+f.r){ f.y=-f.r; f.x=Math.random()*W; }
+      if(f.x>W+12) f.x-=W+24; else if(f.x<-12) f.x+=W+24; } }
+  }
+
+  // --- 렌더 -------------------------------------------------------
+  // 사진 속 저해상도 달 위에 사실적인 달을 그려 덮음(부드러운 마리아·미세 텍스처)
+  function drawMoon(){
+    const mx=bg.moonX, my=bg.moonY, r=bg.moonR;
+    // 은은한 달무리
+    const halo=ctx.createRadialGradient(mx,my,r*0.6,mx,my,r*2.8);
+    halo.addColorStop(0,"rgba(230,232,240,0.12)"); halo.addColorStop(0.5,"rgba(208,214,228,0.035)"); halo.addColorStop(1,"rgba(208,214,228,0)");
+    ctx.fillStyle=halo; ctx.beginPath(); ctx.arc(mx,my,r*2.8,0,7); ctx.fill();
+    ctx.save(); ctx.beginPath(); ctx.arc(mx,my,r,0,7); ctx.clip();
+    // 디스크
+    const md=ctx.createRadialGradient(mx-r*0.2,my-r*0.22,r*0.15,mx,my,r*1.1);
+    md.addColorStop(0,"#f6f4ec"); md.addColorStop(0.7,"#e8e4d8"); md.addColorStop(1,"#d0ccbf");
+    ctx.fillStyle=md; ctx.fillRect(mx-r,my-r,r*2,r*2);
+    // 마리아(어두운 바다) — 부드러운 그라디언트, 낮은 대비
+    function mare(dx,dy,rr,al){ const g=ctx.createRadialGradient(mx+dx*r,my+dy*r,0,mx+dx*r,my+dy*r,rr*r);
+      g.addColorStop(0,`rgba(118,116,108,${al})`); g.addColorStop(0.65,`rgba(128,126,118,${al*0.45})`); g.addColorStop(1,"rgba(140,138,130,0)");
+      ctx.fillStyle=g; ctx.fillRect(mx-r,my-r,r*2,r*2); }
+    mare(-0.16,-0.26,0.52,0.17); mare(0.20,-0.06,0.40,0.14); mare(0.06,0.30,0.46,0.15); mare(-0.36,0.12,0.30,0.11); mare(0.36,0.30,0.28,0.10);
+    // 미세 크레이터(결정적)
+    for(let i=0;i<58;i++){ const ang=i*2.399, rad=Math.sqrt(((i*41)%100)/100)*r*0.95, cx2=mx+Math.cos(ang)*rad, cy2=my+Math.sin(ang)*rad, s=r*(0.008+((i*53)%50)/50*0.03), a=0.05+((i*29)%40)/40*0.08;
+      ctx.fillStyle=`rgba(115,112,104,${a})`; ctx.beginPath(); ctx.arc(cx2,cy2,s,0,7); ctx.fill();
+      ctx.fillStyle=`rgba(252,250,242,${a*0.4})`; ctx.beginPath(); ctx.arc(cx2-s*0.3,cy2-s*0.3,s*0.6,0,7); ctx.fill(); }
+    // 림 다크닝
+    const limb=ctx.createRadialGradient(mx,my,r*0.68,mx,my,r); limb.addColorStop(0,"rgba(0,0,0,0)"); limb.addColorStop(1,"rgba(58,55,49,0.34)");
+    ctx.fillStyle=limb; ctx.fillRect(mx-r,my-r,r*2,r*2);
+    ctx.restore();
+  }
+
+  // 구름 2겹(패럴랙스) — 날씨별 색은 cloudDraw(tint)로
+  function drawClouds(baseAlpha){
+    if(!cloudReady) return;
+    let DW=W*1.9, off=(sceneT*4.5)%DW;
+    ctx.save(); ctx.globalAlpha=0.65*baseAlpha;
+    for(let xo=-off; xo<W; xo+=DW) ctx.drawImage(cloudDraw, xo, -H*0.10, DW, H*1.05);
+    ctx.restore();
+    DW=W*1.12; off=(sceneT*11)%DW;
+    ctx.save(); ctx.globalAlpha=Math.min(1,baseAlpha);
+    for(let xo=-off; xo<W; xo+=DW) ctx.drawImage(cloudDraw, xo, H*0.02, DW, H*0.95);
+    ctx.restore();
+  }
+
+  function drawNightSky(){
+    const sg=ctx.createLinearGradient(0,0,0,H);
+    sg.addColorStop(0,"#060a14"); sg.addColorStop(0.42,"#0a1120"); sg.addColorStop(0.72,"#0a1220"); sg.addColorStop(1,"#05070e");
+    ctx.fillStyle=sg; ctx.fillRect(0,0,W,H);
+    const mw=ctx.createRadialGradient(bg.moonX,bg.moonY,10,bg.moonX,bg.moonY,Math.max(W,H)*0.62);
+    mw.addColorStop(0,"rgba(58,64,84,0.22)"); mw.addColorStop(0.5,"rgba(30,36,54,0.09)"); mw.addColorStop(1,"rgba(20,24,40,0)");
+    ctx.fillStyle=mw; ctx.fillRect(0,0,W,H);
+    ctx.save(); ctx.globalCompositeOperation="lighter";
+    for(const s of stars){ const tw=s.b*(0.65+0.35*Math.sin(sceneT*s.tw+s.ph)); ctx.fillStyle=`rgba(232,238,247,${tw})`; ctx.beginPath(); ctx.arc(s.x,s.y,s.r,0,7); ctx.fill(); }
+    ctx.restore();
+    drawMoon();
+    drawClouds(1.0);
+    const mb=ctx.createRadialGradient(bg.moonX,bg.moonY,bg.moonR*0.85,bg.moonX,bg.moonY,bg.moonR*2.5);
+    mb.addColorStop(0,"rgba(238,238,242,0.16)"); mb.addColorStop(0.4,"rgba(222,226,236,0.09)"); mb.addColorStop(1,"rgba(210,216,230,0)");
+    ctx.save(); ctx.globalCompositeOperation="lighter"; ctx.fillStyle=mb; ctx.beginPath(); ctx.arc(bg.moonX,bg.moonY,bg.moonR*2.5,0,7); ctx.fill(); ctx.restore();
+    const ml=ctx.createRadialGradient(bg.moonX,bg.moonY,bg.moonR*0.5,bg.moonX,bg.moonY,bg.moonR*6);
+    ml.addColorStop(0,"rgba(220,222,230,0.08)"); ml.addColorStop(0.5,"rgba(200,206,222,0.03)"); ml.addColorStop(1,"rgba(200,206,222,0)");
+    ctx.save(); ctx.globalCompositeOperation="lighter"; ctx.fillStyle=ml; ctx.fillRect(0,0,W,H); ctx.restore();
+  }
+
+  function drawSun(){
+    // 따뜻한 여름 햇살(부드럽게, 눈부시지 않게)
+    const mx=bg.moonX,my=bg.moonY,r=bg.moonR;
+    const glow=ctx.createRadialGradient(mx,my,r*0.4,mx,my,r*5);
+    glow.addColorStop(0,"rgba(255,246,214,0.34)"); glow.addColorStop(0.38,"rgba(255,238,196,0.13)"); glow.addColorStop(1,"rgba(255,238,196,0)");
+    ctx.save(); ctx.globalCompositeOperation="lighter"; ctx.fillStyle=glow; ctx.fillRect(0,0,W,H);
+    const d=ctx.createRadialGradient(mx,my,r*0.15,mx,my,r);
+    d.addColorStop(0,"rgba(255,251,232,0.8)"); d.addColorStop(0.6,"rgba(255,244,214,0.38)"); d.addColorStop(1,"rgba(255,240,205,0)");
+    ctx.fillStyle=d; ctx.beginPath(); ctx.arc(mx,my,r,0,7); ctx.fill();
+    ctx.restore();
+  }
+
+  function drawDaySky(){
+    // 싱그러운 여름날 — 선명한 하늘색 + 연둣빛 지평선
+    const sg=ctx.createLinearGradient(0,0,0,H);
+    sg.addColorStop(0,"#3f88c9"); sg.addColorStop(0.4,"#5ea2d6"); sg.addColorStop(0.72,"#a4d2e7"); sg.addColorStop(1,"#dcefdd");
+    ctx.fillStyle=sg; ctx.fillRect(0,0,W,H);
+    // 태양측 따뜻한 대기광
+    const warm=ctx.createRadialGradient(bg.moonX,bg.moonY,bg.moonR*0.5,bg.moonX,bg.moonY,Math.max(W,H)*0.6);
+    warm.addColorStop(0,"rgba(255,246,214,0.16)"); warm.addColorStop(0.5,"rgba(255,240,200,0.05)"); warm.addColorStop(1,"rgba(255,240,200,0)");
+    ctx.save(); ctx.globalCompositeOperation="lighter"; ctx.fillStyle=warm; ctx.fillRect(0,0,W,H); ctx.restore();
+    drawSun();
+    drawClouds(1.05);   // 여름 뭉게구름 적당히
+    // 지평선 싱그러운 연둣빛 하늘거림
+    const hz=ctx.createLinearGradient(0,H*0.5,0,H); hz.addColorStop(0,"rgba(206,236,214,0)"); hz.addColorStop(1,"rgba(212,238,218,0.16)");
+    ctx.fillStyle=hz; ctx.fillRect(0,H*0.5,W,H*0.5);
+  }
+
+  function drawRainSky(){
+    const sg=ctx.createLinearGradient(0,0,0,H);
+    sg.addColorStop(0,"#2b323b"); sg.addColorStop(0.5,"#39424d"); sg.addColorStop(1,"#242a30");
+    ctx.fillStyle=sg; ctx.fillRect(0,0,W,H);
+    const lp=ctx.createRadialGradient(bg.moonX,bg.moonY,10,bg.moonX,bg.moonY,bg.moonR*5);
+    lp.addColorStop(0,"rgba(188,196,208,0.14)"); lp.addColorStop(1,"rgba(188,196,208,0)");
+    ctx.save(); ctx.globalCompositeOperation="lighter"; ctx.fillStyle=lp; ctx.fillRect(0,0,W,H); ctx.restore();
+    drawClouds(1.45);
+    const ov=ctx.createLinearGradient(0,0,0,H); ov.addColorStop(0,"rgba(18,22,27,0.4)"); ov.addColorStop(1,"rgba(14,17,21,0.18)");
+    ctx.fillStyle=ov; ctx.fillRect(0,0,W,H);
+  }
+
+  function drawSnowSky(){
+    // 흐린 겨울 하늘(비보다 밝은 회청색)
+    const sg=ctx.createLinearGradient(0,0,0,H);
+    sg.addColorStop(0,"#3a4550"); sg.addColorStop(0.5,"#4d5863"); sg.addColorStop(1,"#5c6672");
+    ctx.fillStyle=sg; ctx.fillRect(0,0,W,H);
+    const lp=ctx.createRadialGradient(bg.moonX,bg.moonY,10,bg.moonX,bg.moonY,bg.moonR*6);
+    lp.addColorStop(0,"rgba(214,222,232,0.16)"); lp.addColorStop(1,"rgba(214,222,232,0)");
+    ctx.save(); ctx.globalCompositeOperation="lighter"; ctx.fillStyle=lp; ctx.fillRect(0,0,W,H); ctx.restore();
+    drawClouds(1.35);
+    const ov=ctx.createLinearGradient(0,0,0,H); ov.addColorStop(0,"rgba(30,36,44,0.20)"); ov.addColorStop(1,"rgba(24,30,38,0.08)");
+    ctx.fillStyle=ov; ctx.fillRect(0,0,W,H);
+  }
+
+  function drawBg(){
+    if(weather==="day") drawDaySky();
+    else if(weather==="rain") drawRainSky();
+    else if(weather==="snow") drawSnowSky();
+    else drawNightSky();
+    // 필름 그레인(공통)
+    if(grainReady){ ctx.save(); ctx.globalAlpha=0.05; ctx.globalCompositeOperation="overlay";
+      const ox=grainOff.x|0, oy=grainOff.y|0;
+      for(let y=-oy;y<H;y+=256) for(let x=-ox;x<W;x+=256) ctx.drawImage(grain,x,y);
+      ctx.restore(); }
+    // 전경 어둡게(날씨별)
+    const fg=ctx.createLinearGradient(0,H*0.55,0,H);
+    if(weather==="day"){ fg.addColorStop(0,"rgba(34,44,42,0)"); fg.addColorStop(1,"rgba(26,36,34,0.72)"); }
+    else if(weather==="rain"){ fg.addColorStop(0,"rgba(8,10,14,0)"); fg.addColorStop(1,"rgba(6,8,11,0.9)"); }
+    else if(weather==="snow"){ fg.addColorStop(0,"rgba(14,18,24,0)"); fg.addColorStop(1,"rgba(10,14,20,0.88)"); }
+    else { fg.addColorStop(0,"rgba(3,4,9,0)"); fg.addColorStop(1,"rgba(2,3,7,0.92)"); }
+    ctx.fillStyle=fg; ctx.fillRect(0,H*0.55,W,H*0.45);
+  }
+
+  // 빗줄기(맨 앞 레이어)
+  function drawRain(){
+    if(weather!=="rain" || !rain.length) return;
+    ctx.save(); ctx.strokeStyle="rgba(182,198,218,0.26)"; ctx.lineWidth=1.1; ctx.lineCap="round"; ctx.beginPath();
+    for(const d of rain){ ctx.moveTo(d.x,d.y); ctx.lineTo(d.x-d.len*0.26, d.y-d.len); }
+    ctx.stroke(); ctx.restore();
+  }
+  // 눈송이(맨 앞 레이어)
+  function drawSnow(){
+    if(weather!=="snow" || !snow.length) return;
+    ctx.save();
+    for(const f of snow){ ctx.globalAlpha=f.a; ctx.fillStyle="#eef3f8"; ctx.beginPath(); ctx.arc(f.x,f.y,f.r,0,7); ctx.fill(); }
+    ctx.restore();
+  }
+
+  function drawAshtray(){
+    const {cx,cy,rimRx,rimRy,innerRx,innerRy,wallH}=tray;
+    ctx.beginPath(); ctx.moveTo(cx-rimRx,cy);
+    ctx.quadraticCurveTo(cx-rimRx,cy+wallH,cx,cy+wallH);
+    ctx.quadraticCurveTo(cx+rimRx,cy+wallH,cx+rimRx,cy);
+    ctx.quadraticCurveTo(cx,cy+rimRy,cx-rimRx,cy); ctx.closePath();
+    const wall=ctx.createLinearGradient(0,cy,0,cy+wallH); wall.addColorStop(0,"#1a1e26"); wall.addColorStop(1,"#080a0e");
+    ctx.fillStyle=wall; ctx.fill();
+    ctx.beginPath(); ctx.ellipse(cx,cy,rimRx,rimRy,0,0,7); ctx.fillStyle="#20242c"; ctx.fill();
+    ctx.beginPath(); ctx.ellipse(cx,cy+rimRy*0.12,innerRx,innerRy,0,0,7);
+    const well=ctx.createRadialGradient(cx,cy,2,cx,cy,innerRx); well.addColorStop(0,"#040507"); well.addColorStop(1,"#12151b");
+    ctx.fillStyle=well; ctx.fill();
+    for (const s of pile){ ctx.fillStyle=`rgba(150,148,140,${s.sh})`; ctx.beginPath(); ctx.ellipse(s.x,s.y,s.r,s.r*0.6,0,0,7); ctx.fill(); }
+    for (const sgn of [-1,1]){ ctx.fillStyle="rgba(4,5,7,0.85)"; ctx.beginPath(); ctx.ellipse(cx+sgn*rimRx*0.62,cy-rimRy*0.15,rimRx*0.1,rimRy*0.3,0,0,7); ctx.fill(); }
+    ctx.beginPath(); ctx.ellipse(cx,cy,rimRx,rimRy,0,Math.PI*1.08,Math.PI*1.75); ctx.strokeStyle="rgba(120,130,148,0.28)"; ctx.lineWidth=1.2; ctx.stroke();
+  }
+
+  function tapered(d0,d1,c0,c1,c2){
+    const h0=hwAt(d0), h1=hwAt(d1), y0=-d0, y1=-d1, hm=Math.max(h0,h1);
+    ctx.beginPath(); ctx.moveTo(-h0,y0); ctx.lineTo(-h1,y1); ctx.lineTo(h1,y1); ctx.lineTo(h0,y0); ctx.closePath();
+    const g=ctx.createLinearGradient(-hm,0,hm,0);
+    g.addColorStop(0,c0); g.addColorStop(0.42,c1); g.addColorStop(0.5,c2); g.addColorStop(0.62,c1); g.addColorStop(1,c0);
+    ctx.fillStyle=g; ctx.fill();
+  }
+
+  function ringLines(dList,color,lw){
+    ctx.strokeStyle=color; ctx.lineWidth=lw;
+    for (const dd of dList){ ctx.beginPath(); ctx.moveTo(-hwAt(dd),-dd); ctx.lineTo(hwAt(dd),-dd); ctx.stroke(); }
+  }
+
+  function drawCigBody(){
+    const T=TYPES[cig.type];
+    const dF=cig.filterLen, dB=cig.dBurn, dT=cig.done?cig.dBurn:cig.dTop;
+    const hwF=hwAt(dF);
+
+    if (T.wrap==="cigar"){
+      // 캐러멜 잎 래퍼
+      tapered(0,dB,"#6b4022","#a9743e","#c2894f");
+      ctx.save(); ctx.beginPath(); ctx.rect(-cig.hwNear,-dB,cig.hwNear*2,dB); ctx.clip();
+      ctx.strokeStyle="rgba(70,42,20,0.28)"; ctx.lineWidth=1;
+      for (let d=6; d<dB; d+=Math.max(11,cig.hwNear)){ ctx.beginPath(); ctx.moveTo(-hwAt(d),-d); ctx.lineTo(hwAt(d)*0.5,-d-cig.hwNear*1.6); ctx.stroke(); }
+      ctx.restore();
+      // 흰 인쇄 밴드 + 금선 + 엠블럼
+      const b0=dF*0.55, b1=b0+cig.L*0.06, bm=(b0+b1)/2;
+      tapered(b0,b1,"#cdbfa4","#efe7d6","#fbf6ec");
+      ringLines([b0+2,b1-2],"rgba(150,110,40,0.75)",1.4);
+      ctx.fillStyle="rgba(150,110,40,0.6)"; ctx.beginPath(); ctx.arc(0,-bm,hwAt(bm)*0.28,0,7); ctx.fill();
+    } else {
+      // 필터
+      if (T.filter==="cork"){
+        tapered(0,dF,"#9a6f30","#c99a4e","#e0b566");
+        ctx.save(); ctx.beginPath(); ctx.rect(-cig.hwNear,-dF,cig.hwNear*2,dF); ctx.clip();
+        ctx.fillStyle="rgba(90,58,20,0.4)";
+        for (let i=0;i<24;i++){ const sx=-cig.hwNear+Math.abs(Math.sin(i*12.9))*cig.hwNear*2, sy=-Math.abs(Math.sin(i*7.7))*dF; ctx.beginPath(); ctx.arc(sx,sy,0.8,0,7); ctx.fill(); }
+        ctx.restore();
+      } else {
+        // 흰색 필터(에쎄·메비우스)
+        tapered(0,dF,"#d7d8db","#eef0f2","#ffffff");
+      }
+      // 종이(밴드보다 먼저)
+      tapered(dF,dB,"#cdc8bd","#f1eee6","#fdfbf6");
+      // 밴드/씰(종이 위에)
+      if (T.band==="gold"){
+        tapered(dF,dF+cig.L*0.032,"#8a6a18","#d6b048","#f2d670");
+        ringLines([dF+1.5,dF+cig.L*0.032-1.5],"rgba(110,84,20,0.75)",1.2);
+      } else if (T.band==="silver"){
+        tapered(dF-cig.L*0.006,dF+cig.L*0.006,"#7d838c","#c4c9d0","#eef1f4");
+        if (T.logo){ ctx.fillStyle=T.logo; const ly=dF*0.62; ctx.beginPath(); ctx.arc(0,-ly,Math.max(1.4,hwF*0.22),0,7); ctx.fill(); ctx.fillRect(-hwF*0.55,-ly-0.7,hwF*1.1,1.4); }
+      } else {
+        ringLines([dF],"rgba(176,176,182,0.7)",1);
+      }
+    }
+
+    drawEmber(dB,dT);
+  }
+
+  // 사실적인 재 기둥 + 연소선(불씨 링) + 살아있는 불씨
+  function drawEmber(dB,dT){
+    const hwB=hwAt(dB), hwR=hwAt(dT);
+    if (!cig.lit && cig.heat<0.02){
+      // 불 안 붙은 담뱃잎 끝(갈색 절단면)
+      ctx.fillStyle="#5e4d31"; ctx.beginPath(); ctx.ellipse(0,-dT,hwR,hwR*0.5,0,0,7); ctx.fill();
+      ctx.fillStyle="rgba(35,26,14,0.55)";
+      for(let i=0;i<5;i++){ ctx.beginPath(); ctx.arc((i/4-0.5)*hwR*1.3, -dT+Math.sin(i*2.1)*hwR*0.18, 0.8+((i*7)%3)*0.4, 0,7); ctx.fill(); }
+      ctx.fillStyle="rgba(180,160,120,0.3)"; ctx.beginPath(); ctx.ellipse(-hwR*0.2,-dT-hwR*0.05,hwR*0.4,hwR*0.22,0,0,7); ctx.fill();
+      return;
+    }
+    const flick=0.75+0.25*Math.sin(cig.flick)+0.12*Math.sin(cig.flick*2.3), inten=cig.heat*flick;
+    if (dT>dB+0.5){
+      // 밝은 회색 재 몸통(원통 음영)
+      tapered(dB,dT,"#4a453d","#a9a093","#ccc4b5");
+      ctx.save(); ctx.beginPath(); ctx.rect(-hwR-1,-dT,(hwR+1)*2,dT-dB); ctx.clip();
+      // 분절 밴드(재가 타며 생기는 가로 결)
+      ctx.lineWidth=0.9;
+      for (let d=dB+2; d<dT; d+=Math.max(2.5,hwB*0.55)){ const wob=Math.sin(d*0.8)*1; ctx.strokeStyle=`rgba(46,42,37,${0.3+0.15*Math.sin(d)})`; ctx.beginPath(); ctx.moveTo(-hwAt(d),-d+wob); ctx.lineTo(hwAt(d),-d-wob); ctx.stroke(); }
+      // 세로 결
+      ctx.strokeStyle="rgba(70,64,56,0.18)"; for (let k=-2;k<=2;k++){ const xx=k*hwB*0.42; ctx.beginPath(); ctx.moveTo(xx,-dB); ctx.lineTo(xx*0.7,-dT); ctx.stroke(); }
+      // 불씨 근처 재는 그을려 어둡게
+      const charLen=Math.min(hwB*3.5,dT-dB);
+      const cg=ctx.createLinearGradient(0,-dB,0,-dB-charLen);
+      cg.addColorStop(0,"rgba(52,44,38,0.75)"); cg.addColorStop(1,"rgba(52,44,38,0)");
+      ctx.fillStyle=cg; ctx.fillRect(-hwB,-dB-charLen,hwB*2,charLen);
+      ctx.restore();
+      // 재 끝(둥근 밝은 회색)
+      ctx.fillStyle="#cdc6b8"; ctx.beginPath(); ctx.ellipse(0,-dT,hwR*0.96,hwR*0.5,0,0,7); ctx.fill();
+      ctx.fillStyle="rgba(72,65,56,0.2)"; ctx.beginPath(); ctx.ellipse(0,-dT+hwR*0.12,hwR*0.5,hwR*0.26,0,0,7); ctx.fill();
+    }
+    // 연소선(불씨 링) — 종이/재 경계의 밝은 주황 링
+    const ring=ctx.createLinearGradient(0,-dB+hwB*0.9,0,-dB-hwB*0.9);
+    ring.addColorStop(0,"rgba(120,40,12,0)");
+    ring.addColorStop(0.38,`rgba(200,55,18,${0.55*inten})`);
+    ring.addColorStop(0.5,`rgba(255,105,32,${0.95*inten})`);
+    ring.addColorStop(0.64,`rgba(255,180,85,${inten})`);
+    ring.addColorStop(1,"rgba(150,55,18,0)");
+    ctx.fillStyle=ring; ctx.fillRect(-hwB,-dB-hwB*0.9,hwB*2,hwB*1.8);
+    // 살아있는 불씨 알갱이
+    if (!cig.done || cig.heat>0.02){
+      for (let i=0;i<8;i++){
+        const ex=-hwB+((i+0.5)/8)*hwB*2+Math.sin(cig.flick+i)*0.8;
+        const cell=0.4+0.6*Math.abs(Math.sin(cig.flick*1.7+i*2.1));
+        ctx.fillStyle=`rgba(255,${150+cell*80|0},${45+cell*70|0},${cell*inten})`;
+        ctx.beginPath(); ctx.arc(ex,-dB+Math.sin(i*3)*1.1,0.8+cell*1.3,0,7); ctx.fill();
+      }
+    }
+  }
+
+  function drawCigScene(){
+    ctx.save(); ctx.translate(sc.ox,sc.oy); ctx.rotate(-sc.a); drawCigBody(); ctx.restore();
+    if (cig.heat>0.02){
+      const e=emberWorld(); const flick=0.8+0.2*Math.sin(cig.flick*1.3);
+      const rad=cig.hwNear*(5+cig.heat*4)*flick;
+      ctx.save(); ctx.globalCompositeOperation="lighter";
+      const bg=ctx.createRadialGradient(e.x,e.y,0,e.x,e.y,rad);
+      bg.addColorStop(0,`rgba(255,150,60,${0.55*cig.heat})`); bg.addColorStop(0.4,`rgba(255,90,30,${0.24*cig.heat})`); bg.addColorStop(1,"rgba(255,60,20,0)");
+      ctx.fillStyle=bg; ctx.beginPath(); ctx.arc(e.x,e.y,rad,0,7); ctx.fill(); ctx.restore();
+    }
+    // 불 붙는 순간 불꽃 플레어
+    if (flare>0.01){
+      const e=emberWorld(); const fr=flare, fl=0.85+0.15*Math.sin(cig.flick*3);
+      const rad=cig.hwNear*(4+fr*8)*fl;
+      ctx.save(); ctx.globalCompositeOperation="lighter";
+      const g=ctx.createRadialGradient(e.x,e.y,0,e.x,e.y,rad);
+      g.addColorStop(0,`rgba(255,220,120,${0.6*fr})`); g.addColorStop(0.35,`rgba(255,150,40,${0.35*fr})`); g.addColorStop(1,"rgba(255,110,20,0)");
+      ctx.fillStyle=g; ctx.beginPath(); ctx.arc(e.x,e.y,rad,0,7); ctx.fill(); ctx.restore();
+    }
+  }
+
+  function drawSparks(){
+    ctx.save(); ctx.globalCompositeOperation="lighter";
+    for (const s of sparks){ const a=1-s.age/s.life; ctx.fillStyle=`rgba(255,${150+a*80|0},60,${a})`; ctx.beginPath(); ctx.arc(s.x,s.y,s.r,0,7); ctx.fill(); }
+    ctx.restore();
+  }
+  function drawAshBits(){
+    for (const b of ashBits){
+      const a=Math.min(1,(b.life-b.age)/0.9)*0.8;
+      ctx.save(); ctx.translate(b.x,b.y); ctx.rotate(b.rot);
+      ctx.fillStyle=`rgba(150,144,134,${a})`; ctx.fillRect(-b.r,-b.r*0.5,b.r*2,b.r);
+      ctx.restore();
+    }
+  }
+  // 재떨이에 버려진 꽁초들
+  function drawButts(){
+    for (const b of butts){
+      ctx.save(); ctx.translate(b.x,b.y); ctx.rotate(-b.a);
+      const hw=b.hw;
+      const g=ctx.createLinearGradient(-hw,0,hw,0);
+      g.addColorStop(0,"#8f8a7e"); g.addColorStop(0.5,"#e4dfd3"); g.addColorStop(1,"#8f8a7e");
+      ctx.fillStyle=g; ctx.fillRect(-hw,-b.L,hw*2,b.L);
+      ctx.fillStyle=b.cork?"#c69a4e":"#eceae2"; ctx.fillRect(-hw,-b.fl,hw*2,b.fl);
+      const cg=ctx.createLinearGradient(0,-b.L,0,-b.L+hw*2.2);
+      cg.addColorStop(0,"#191612"); cg.addColorStop(1,"rgba(35,30,26,0)");
+      ctx.fillStyle=cg; ctx.fillRect(-hw,-b.L,hw*2,hw*2.2);
+      ctx.fillStyle="#141110"; ctx.beginPath(); ctx.ellipse(0,-b.L,hw,hw*0.5,0,0,7); ctx.fill();
+      ctx.restore();
+    }
+  }
+  function drawSmoke(){
+    if (haze>0.002){ ctx.fillStyle="rgba(200,206,216,"+Math.min(0.17,haze*0.15).toFixed(3)+")"; ctx.fillRect(0,0,W,H); }
+    for (const p of smoke){
+      const la=Math.min(1,p.age/p.life);
+      const a=p.alpha*Math.sin(la*Math.PI);
+      if (a<0.003) continue;
+      const bf=p.bright*(0.55+0.45*(1-la));
+      const col=(140+bf*95)|0, c2=(col+16)|0;
+      const g=ctx.createRadialGradient(p.x,p.y,0,p.x,p.y,p.r);
+      g.addColorStop(0,`rgba(${c2},${c2},${(c2+8)|0},${a})`);
+      g.addColorStop(0.5,`rgba(${col},${(col+4)|0},${(col+12)|0},${a*0.5})`);
+      g.addColorStop(1,"rgba(150,158,172,0)");
+      ctx.fillStyle=g; ctx.beginPath(); ctx.arc(p.x,p.y,p.r,0,7); ctx.fill();
+    }
+  }
+
+  // --- 오디오 -----------------------------------------------------
+  let AC=null, master, drawGain, windGain, rainGain, playGain, noiseBuf, audioReady=false, muted=false;
+  const audioState={ lit:false, draw:false };
+  function initAudio(){
+    if (audioReady) return; const Ctx=window.AudioContext||window.webkitAudioContext; if (!Ctx) return;
+    AC=new Ctx(); master=AC.createGain(); master.gain.value=muted?0:0.9; master.connect(AC.destination);
+    noiseBuf=AC.createBuffer(1,Math.floor(AC.sampleRate*2),AC.sampleRate);
+    const d=noiseBuf.getChannelData(0); for (let i=0;i<d.length;i++) d[i]=Math.random()*2-1;
+    const src=AC.createBufferSource(); src.buffer=noiseBuf; src.loop=true;
+    const f=AC.createBiquadFilter(); f.type="bandpass"; f.frequency.value=1050; f.Q.value=0.7;
+    drawGain=AC.createGain(); drawGain.gain.value=0; src.connect(f); f.connect(drawGain); drawGain.connect(master); src.start();
+    // 배경 앰비언스: 바람(밤/눈) 지속 레이어
+    const wSrc=AC.createBufferSource(); wSrc.buffer=noiseBuf; wSrc.loop=true;
+    const wLP=AC.createBiquadFilter(); wLP.type="lowpass"; wLP.frequency.value=480; wLP.Q.value=0.5;
+    windGain=AC.createGain(); windGain.gain.value=0; wSrc.connect(wLP); wLP.connect(windGain); windGain.connect(master); wSrc.start();
+    const wLfo=AC.createOscillator(); wLfo.frequency.value=0.11; const wLfoG=AC.createGain(); wLfoG.gain.value=160; wLfo.connect(wLfoG); wLfoG.connect(wLP.frequency); wLfo.start();
+    // 비 지속 레이어
+    const rSrc=AC.createBufferSource(); rSrc.buffer=noiseBuf; rSrc.loop=true;
+    const rHP=AC.createBiquadFilter(); rHP.type="highpass"; rHP.frequency.value=950;
+    const rLP=AC.createBiquadFilter(); rLP.type="lowpass"; rLP.frequency.value=7000;
+    rainGain=AC.createGain(); rainGain.gain.value=0; rSrc.connect(rHP); rHP.connect(rLP); rLP.connect(rainGain); rainGain.connect(master); rSrc.start();
+    // 운동장 웅성거림(낮): 성대역 노이즈 + 느린 트레몰로
+    const pSrc=AC.createBufferSource(); pSrc.buffer=noiseBuf; pSrc.loop=true;
+    const pBP=AC.createBiquadFilter(); pBP.type="bandpass"; pBP.frequency.value=650; pBP.Q.value=0.8;
+    const pBP2=AC.createBiquadFilter(); pBP2.type="bandpass"; pBP2.frequency.value=1400; pBP2.Q.value=1.1;
+    const pTrem=AC.createGain(); pTrem.gain.value=0.8;
+    playGain=AC.createGain(); playGain.gain.value=0;
+    pSrc.connect(pBP); pBP.connect(pBP2); pBP2.connect(pTrem); pTrem.connect(playGain); playGain.connect(master); pSrc.start();
+    const pLfo=AC.createOscillator(); pLfo.type="sine"; pLfo.frequency.value=0.5; const pLfoG=AC.createGain(); pLfoG.gain.value=0.25; pLfo.connect(pLfoG); pLfoG.connect(pTrem.gain); pLfo.start();
+    audioReady=true;
+    applyAmbientGains();
+    unlockAudio();
+    primeSilent();   // iOS 무음 스위치 우회(미디어 세션 전환)
+  }
+  function unlockAudio(){
+    if(!AC) return;
+    try{ if(AC.state!=="running") AC.resume(); }catch(e){}
+    // 무음 1샘플 버퍼로 iOS 완전 unlock
+    try{ const b=AC.createBuffer(1,1,AC.sampleRate); const s=AC.createBufferSource(); s.buffer=b; s.connect(AC.destination); s.start(0); }catch(e){}
+  }
+  function resumeAudio(){ unlockAudio(); }
+  // iOS 무음(벨/무음) 스위치에서도 Web Audio가 나오도록 무음 오디오로 미디어 세션 전환
+  let silentEl=null;
+  function primeSilent(){
+    try{
+      if(!silentEl){
+        const sr=8000, sec=1, n=sr*sec, buf=new ArrayBuffer(44+n*2), v=new DataView(buf);
+        const ws=(o,s)=>{ for(let i=0;i<s.length;i++) v.setUint8(o+i,s.charCodeAt(i)); };
+        ws(0,"RIFF"); v.setUint32(4,36+n*2,true); ws(8,"WAVE"); ws(12,"fmt "); v.setUint32(16,16,true); v.setUint16(20,1,true); v.setUint16(22,1,true); v.setUint32(24,sr,true); v.setUint32(28,sr*2,true); v.setUint16(32,2,true); v.setUint16(34,16,true); ws(36,"data"); v.setUint32(40,n*2,true);
+        const u8=new Uint8Array(buf); let bin=""; for(let i=0;i<u8.length;i++) bin+=String.fromCharCode(u8[i]);
+        silentEl=new Audio("data:audio/wav;base64,"+btoa(bin)); silentEl.loop=true; silentEl.volume=1; silentEl.setAttribute("playsinline","");
+      }
+      const p=silentEl.play(); if(p&&p.catch) p.catch(()=>{});
+    }catch(e){}
+  }
+  function crackle(){
+    if (!audioReady||muted) return; const now=AC.currentTime;
+    const src=AC.createBufferSource(); src.buffer=noiseBuf; src.playbackRate.value=0.8+Math.random()*0.7;
+    const f=AC.createBiquadFilter(); f.type="highpass"; f.frequency.value=2200+Math.random()*2600;
+    const g=AC.createGain(); const peak=0.04+Math.random()*0.08;
+    g.gain.setValueAtTime(0.0001,now); g.gain.linearRampToValueAtTime(peak,now+0.004); g.gain.exponentialRampToValueAtTime(0.0006,now+0.05+Math.random()*0.07);
+    src.connect(f); f.connect(g); g.connect(master); src.start(now); src.stop(now+0.16);
+  }
+  // 부드럽고 낮은 입김 — 누른 시간만큼 길게
+  function exhaleSound(holdMs){
+    if (!audioReady||muted) return; const now=AC.currentTime;
+    const dur=Math.max(0.3,Math.min(2.6,holdMs/1000*1.2+0.3));
+    const peak=Math.min(0.55,0.22+Math.min(holdMs,1800)*0.00026);
+    const atk=Math.min(0.14,dur*0.28);
+    const src=AC.createBufferSource(); src.buffer=noiseBuf; src.playbackRate.value=0.62;  // 낮고 두툼한 공기음
+    const hp=AC.createBiquadFilter(); hp.type="highpass"; hp.frequency.value=160;          // 저역 럼블 제거
+    const lp=AC.createBiquadFilter(); lp.type="lowpass"; lp.Q.value=0.4;
+    lp.frequency.setValueAtTime(1150,now); lp.frequency.linearRampToValueAtTime(560,now+dur*0.85); // 후~ 하고 잦아듦
+    const g=AC.createGain();
+    g.gain.setValueAtTime(0.0001,now);
+    g.gain.linearRampToValueAtTime(peak,now+atk);
+    g.gain.setValueAtTime(peak,now+Math.max(atk,dur*0.5));
+    g.gain.exponentialRampToValueAtTime(0.0005,now+dur);
+    src.connect(hp); hp.connect(lp); lp.connect(g); g.connect(master);
+    src.start(now); src.stop(now+dur+0.05);
+  }
+  function tapSound(){
+    if (!audioReady||muted) return; const now=AC.currentTime;
+    const src=AC.createBufferSource(); src.buffer=noiseBuf;
+    const f=AC.createBiquadFilter(); f.type="lowpass"; f.frequency.value=700; f.Q.value=1.2;
+    const g=AC.createGain(); g.gain.setValueAtTime(0.0001,now); g.gain.linearRampToValueAtTime(0.3,now+0.005); g.gain.exponentialRampToValueAtTime(0.0008,now+0.11);
+    src.connect(f); f.connect(g); g.connect(master); src.start(now); src.stop(now+0.16);
+    const o=AC.createOscillator(); o.type="triangle"; o.frequency.setValueAtTime(190,now);
+    const og=AC.createGain(); og.gain.setValueAtTime(0.14,now); og.gain.exponentialRampToValueAtTime(0.0005,now+0.18);
+    o.connect(og); og.connect(master); o.start(now); o.stop(now+0.2);
+  }
+  function flintTick(){ // 부싯돌 긁힘(치릭)
+    if(!audioReady||muted) return; const now=AC.currentTime;
+    const src=AC.createBufferSource(); src.buffer=noiseBuf; src.playbackRate.value=1.1+Math.random()*0.6;
+    const hp=AC.createBiquadFilter(); hp.type="highpass"; hp.frequency.value=2600+Math.random()*1500;
+    const g=AC.createGain(); const pk=0.09+Math.random()*0.05; g.gain.setValueAtTime(0.0001,now); g.gain.linearRampToValueAtTime(pk,now+0.004); g.gain.exponentialRampToValueAtTime(0.0005,now+0.05+Math.random()*0.03);
+    src.connect(hp); hp.connect(g); g.connect(master); src.start(now); src.stop(now+0.1);
+  }
+  function gasIgnite(){ // 가스 점화 화르륵
+    if(!audioReady||muted) return; const now=AC.currentTime;
+    const fs=AC.createBufferSource(); fs.buffer=noiseBuf; fs.loop=true; fs.playbackRate.value=0.7;
+    const lp=AC.createBiquadFilter(); lp.type="lowpass"; lp.frequency.setValueAtTime(600,now); lp.frequency.linearRampToValueAtTime(1600,now+0.12); lp.frequency.linearRampToValueAtTime(520,now+0.6);
+    const bp=AC.createBiquadFilter(); bp.type="bandpass"; bp.frequency.value=520; bp.Q.value=0.6;
+    const g=AC.createGain(); g.gain.setValueAtTime(0.0001,now); g.gain.linearRampToValueAtTime(0.16,now+0.05); g.gain.setValueAtTime(0.11,now+0.3); g.gain.exponentialRampToValueAtTime(0.0006,now+0.7);
+    fs.connect(lp); lp.connect(bp); bp.connect(g); g.connect(master); fs.start(now); fs.stop(now+0.75);
+  }
+  function hissSound(){ // 치이익: 재떨이에 비벼 끄기
+    if(!audioReady||muted) return; const now=AC.currentTime; const dur=0.7+Math.random()*0.3;
+    const src=AC.createBufferSource(); src.buffer=noiseBuf; src.loop=true;
+    const bp=AC.createBiquadFilter(); bp.type="bandpass"; bp.Q.value=1.1; bp.frequency.setValueAtTime(4200,now); bp.frequency.exponentialRampToValueAtTime(850,now+dur);
+    const g=AC.createGain(); g.gain.setValueAtTime(0.0001,now); g.gain.linearRampToValueAtTime(0.16,now+0.02); g.gain.exponentialRampToValueAtTime(0.0006,now+dur);
+    src.connect(bp); bp.connect(g); g.connect(master); src.start(now); src.stop(now+dur+0.05);
+  }
+  // --- 날씨별 배경 앰비언스 -----------------------------------------
+  function applyAmbientGains(){ if(!audioReady) return; const now=AC.currentTime;
+    windGain.gain.setTargetAtTime(weather==="night"?0.16:(weather==="snow"?0.10:0), now, 0.6);
+    rainGain.gain.setTargetAtTime(weather==="rain"?0.55:0, now, 0.5);
+    playGain.gain.setTargetAtTime(weather==="day"?0.13:0, now, 0.6);
+  }
+  function kidShout(){ // 운동장 아이 고함(우와~)
+    if(!audioReady||muted) return; const now=AC.currentTime; const dur=0.3+Math.random()*0.4; const base=340+Math.random()*260;
+    const bp=AC.createBiquadFilter(); bp.type="bandpass"; bp.Q.value=4; bp.frequency.value=base*3;
+    const g=AC.createGain(); g.gain.setValueAtTime(0.0001,now); g.gain.linearRampToValueAtTime(0.05,now+0.05); g.gain.setValueAtTime(0.05,now+dur*0.5); g.gain.exponentialRampToValueAtTime(0.0006,now+dur);
+    bp.connect(g); g.connect(master);
+    for(const det of [1,1.006]){ const o=AC.createOscillator(); o.type="sawtooth";
+      o.frequency.setValueAtTime(base*det,now); o.frequency.linearRampToValueAtTime(base*det*1.25,now+dur*0.35); o.frequency.linearRampToValueAtTime(base*det*0.9,now+dur);
+      const og=AC.createGain(); og.gain.value=0.5; o.connect(og); og.connect(bp); o.start(now); o.stop(now+dur+0.05); }
+  }
+  function whistle(){ // 호루라기
+    if(!audioReady||muted) return; const now=AC.currentTime; const dur=0.34;
+    const o=AC.createOscillator(); o.type="sine"; o.frequency.setValueAtTime(2100,now);
+    const vib=AC.createOscillator(); vib.frequency.value=6; const vibG=AC.createGain(); vibG.gain.value=28; vib.connect(vibG); vibG.connect(o.frequency); vib.start();
+    const g=AC.createGain(); g.gain.setValueAtTime(0.0001,now); g.gain.linearRampToValueAtTime(0.045,now+0.03); g.gain.setValueAtTime(0.045,now+dur*0.7); g.gain.exponentialRampToValueAtTime(0.0006,now+dur);
+    o.connect(g); g.connect(master); o.start(now); o.stop(now+dur+0.05); vib.stop(now+dur+0.05);
+  }
+  function chirp(){ // 풀벌레 찌르르
+    if(!audioReady||muted) return; const now=AC.currentTime; const base=3900+Math.random()*1000;
+    const o=AC.createOscillator(); o.type="square"; o.frequency.value=base;
+    const bp=AC.createBiquadFilter(); bp.type="bandpass"; bp.frequency.value=base; bp.Q.value=7;
+    const g=AC.createGain(); g.gain.value=0.0001; o.connect(bp); bp.connect(g); g.connect(master);
+    const pulses=3+Math.floor(Math.random()*4); let t=now;
+    for(let i=0;i<pulses;i++){ g.gain.setValueAtTime(0.0001,t); g.gain.linearRampToValueAtTime(0.038,t+0.005); g.gain.exponentialRampToValueAtTime(0.0005,t+0.028); t+=0.04; }
+    o.start(now); o.stop(t+0.05);
+  }
+  function carPass(){ // 차 지나감(도플러 휘익)
+    if(!audioReady||muted) return; const now=AC.currentTime; const dur=2.2+Math.random()*1.2;
+    const src=AC.createBufferSource(); src.buffer=noiseBuf; src.loop=true; src.playbackRate.value=0.75+Math.random()*0.2;
+    const bp=AC.createBiquadFilter(); bp.type="bandpass"; bp.Q.value=0.9;
+    bp.frequency.setValueAtTime(260,now); bp.frequency.linearRampToValueAtTime(820,now+dur*0.5); bp.frequency.linearRampToValueAtTime(230,now+dur);
+    const g=AC.createGain(); g.gain.setValueAtTime(0.0001,now); g.gain.linearRampToValueAtTime(0.11,now+dur*0.5); g.gain.exponentialRampToValueAtTime(0.0007,now+dur);
+    if(AC.createStereoPanner){ const pan=AC.createStereoPanner(); pan.pan.setValueAtTime(-0.85,now); pan.pan.linearRampToValueAtTime(0.85,now+dur); src.connect(bp); bp.connect(g); g.connect(pan); pan.connect(master); }
+    else { src.connect(bp); bp.connect(g); g.connect(master); }
+    src.start(now); src.stop(now+dur+0.1);
+  }
+  function honk(){ // 가벼운 경적
+    if(!audioReady||muted) return; const now=AC.currentTime;
+    const g=AC.createGain(); g.gain.setValueAtTime(0.0001,now); g.gain.linearRampToValueAtTime(0.08,now+0.03); g.gain.setValueAtTime(0.08,now+0.16); g.gain.exponentialRampToValueAtTime(0.0006,now+0.3); g.connect(master);
+    for(const fr of [370,466]){ const o=AC.createOscillator(); o.type="sawtooth"; o.frequency.value=fr; const og=AC.createGain(); og.gain.value=0.5; o.connect(og); og.connect(g); o.start(now); o.stop(now+0.32); }
+  }
+  function crunch(){ // 눈 밟는 뽀득
+    if(!audioReady||muted) return; const now=AC.currentTime; const sub=2+Math.floor(Math.random()*2); let t=now;
+    for(let i=0;i<sub;i++){ const src=AC.createBufferSource(); src.buffer=noiseBuf; src.playbackRate.value=0.85+Math.random()*0.5;
+      const hp=AC.createBiquadFilter(); hp.type="highpass"; hp.frequency.value=1700+Math.random()*1400;
+      const g=AC.createGain(); const peak=0.10+Math.random()*0.06;
+      g.gain.setValueAtTime(0.0001,t); g.gain.linearRampToValueAtTime(peak,t+0.006); g.gain.exponentialRampToValueAtTime(0.0005,t+0.045+Math.random()*0.04);
+      src.connect(hp); hp.connect(g); g.connect(master); src.start(t); src.stop(t+0.14); t+=0.028+Math.random()*0.05; }
+  }
+  let acCricket=0, acCar=0, acHonk=0, acStep=0, acShout=0, acWhistle=0;
+  function updateAmbient(dt){
+    if(!audioReady||muted) return;
+    if(weather==="night"){ acCricket-=dt; if(acCricket<=0){ chirp(); if(Math.random()<0.5) chirp(); acCricket=0.3+Math.random()*0.8; } }
+    else if(weather==="day"){
+      acCar-=dt; if(acCar<=0){ carPass(); acCar=3.5+Math.random()*5; }
+      acHonk-=dt; if(acHonk<=0){ honk(); acHonk=(Math.random()<0.25)?0.35:10+Math.random()*14; }
+      acShout-=dt; if(acShout<=0){ kidShout(); if(Math.random()<0.3) kidShout(); acShout=1.2+Math.random()*2.6; }   // 운동장 고함
+      acWhistle-=dt; if(acWhistle<=0){ whistle(); acWhistle=12+Math.random()*22; }                                  // 호루라기
+    }
+    else if(weather==="snow"){ acStep-=dt; if(acStep<=0){ crunch(); acStep=0.5+Math.random()*0.45; } }
+  }
+  function updateAudio(dt){
+    if (!audioReady) return;
+    if (AC.state!=="running"){ try{ AC.resume(); }catch(e){} }
+    const tg=audioState.draw?0.14:(audioState.lit?0.02:0);
+    drawGain.gain.setTargetAtTime(tg,AC.currentTime,0.08);
+    if (!muted && audioState.lit){ const rate=audioState.draw?32:8; if (Math.random()<dt*rate) crackle(); }
+    updateAmbient(dt);
+  }
+
+  // --- 루프 -------------------------------------------------------
+  let last=0;
+  function frame(now){
+    if (!last) last=now; let dt=(now-last)/1000; last=now; if (dt>0.05) dt=0.05;
+    const t=now/1000;
+    update(dt,t); updateAudio(dt);
+    drawBg(); drawAshtray(); drawButts(); drawAshBits(); drawCigScene(); drawSparks(); drawSmoke(); drawRain(); drawSnow();
+    requestAnimationFrame(frame);
+  }
+
+  // --- 입력 -------------------------------------------------------
+  const hint=document.getElementById("hint"), puffsEl=document.getElementById("puffs");
+  const muteBtn=document.getElementById("mute"), pickBtn=document.getElementById("pickBtn"), menu=document.getElementById("menu");
+  let hinted=false, puffs=0, lastTapT=0;
+  const LIGHT_HINT="<b>아래로 긁어</b> 담뱃불 붙이기";
+
+  function closeMenu(){ menu.hidden=true; pickBtn.setAttribute("aria-expanded","false"); }
+  let scratching=false, scrLastY=0, scrStartY=0, scrAcc=0;
+  const ptrY=(e)=>{ const t=e.touches&&e.touches[0]; return t?t.clientY:e.clientY; };
+
+  function ignite(){
+    scratching=false;
+    cig.lit=true; cig.heat=1; flare=1; gasIgnite();
+    hint.innerHTML="<b>꾹</b> 눌러 빨고 <b>·</b> 떼면 연기 <b>·</b> 우클릭/더블탭 재털기";
+    hinted=false;
+    setTimeout(()=>{ hint.classList.add("gone"); hinted=true; }, 2800);
+  }
+  function onDown(e){
+    initAudio(); resumeAudio(); closeMenu();
+    if (cig.done || tossT>=0) return;
+    if (cig.lit){ if(!hinted){ hint.classList.add("gone"); hinted=true; } cig.drawing=true; cig.holdMs=0; }
+    else { scratching=true; scrStartY=scrLastY=ptrY(e); scrAcc=0; }
+  }
+  function onMove(e){
+    if (!scratching) return;
+    const y=ptrY(e), dy=y-scrLastY; scrLastY=y;
+    if (dy>1.5){ scrAcc+=dy; while(scrAcc>26){ scrAcc-=26; flintTick(); const em=emberWorld(); addSpark(em.x,em.y); } }
+    if (!cig.lit && (y-scrStartY)>85) ignite();
+  }
+  function release(){
+    if (!cig.drawing) return; cig.drawing=false;
+    if (cig.holdMs>170){ exhale(cig.holdMs/14); exhaleSound(cig.holdMs); puffs+=1; puffsEl.textContent=puffs; }
+  }
+  function onUp(){ if (scratching){ scratching=false; } else release(); }
+
+  canvas.addEventListener("mousedown",(e)=>{ if (e.button===0){ e.preventDefault(); onDown(e); } });
+  window.addEventListener("mousemove", onMove);
+  window.addEventListener("mouseup", onUp);
+  canvas.addEventListener("touchstart",(e)=>{ e.preventDefault(); onDown(e); },{passive:false});
+  canvas.addEventListener("touchmove",(e)=>{ e.preventDefault(); onMove(e); },{passive:false});
+  canvas.addEventListener("touchend",(e)=>{ e.preventDefault();   // canvas에만 → HUD 버튼 탭 안 잡아먹음
+    const held=cig.holdMs, wasScratch=scratching;
+    onUp();
+    // 불 붙은 상태에서 짧은 탭 2번(더블 탭) = 재 털기
+    if (cig.lit && !wasScratch && held<260){ const now=(performance&&performance.now?performance.now():Date.now());
+      if (now-lastTapT<330){ initAudio(); resumeAudio(); tap(); lastTapT=0; } else lastTapT=now; }
+    else lastTapT=0;
+  },{passive:false});
+  canvas.addEventListener("touchcancel",()=>{ scratching=false; release(); });
+  window.addEventListener("blur",()=>{ scratching=false; release(); });
+  canvas.addEventListener("contextmenu",(e)=>{ e.preventDefault(); if(!cig.lit) return; initAudio(); resumeAudio(); tap(); });
+
+  function setType(t){
+    cig.type=t; cig.dBurn=null; cig.done=false; cig.heat=0; cig.drawing=false; layout();  // 새 담배는 불 안 붙음
+    hint.innerHTML=LIGHT_HINT; hint.classList.remove("gone"); hinted=false;
+    pickBtn.textContent="담배 선택 · "+TYPES[t].label;
+    menu.querySelectorAll("button").forEach((b)=>b.classList.toggle("active",b.dataset.t===t));
+  }
+  const weatherEl=document.getElementById("weather");
+  function setWeather(w){
+    weather=w;
+    if(w==="day") tintClouds(248,250,252);
+    else if(w==="rain") tintClouds(96,104,112);
+    else if(w==="snow") tintClouds(198,206,216);
+    else tintClouds(168,178,200);
+    applyAmbientGains();
+    weatherEl.querySelectorAll(".wbtn").forEach((b)=>b.classList.toggle("active",b.dataset.w===w));
+  }
+  weatherEl.addEventListener("click",(e)=>{ const b=e.target.closest(".wbtn"); if(!b) return; e.stopPropagation(); initAudio(); resumeAudio(); setWeather(b.dataset.w); });
+
+  pickBtn.addEventListener("click",(e)=>{ e.stopPropagation(); initAudio(); resumeAudio(); const open=menu.hidden; menu.hidden=!open; pickBtn.setAttribute("aria-expanded",String(open)); });
+  menu.addEventListener("click",(e)=>{ const b=e.target.closest("button"); if (!b) return; e.stopPropagation(); setType(b.dataset.t); closeMenu(); });
+  document.addEventListener("click",closeMenu);
+
+  muteBtn.addEventListener("click",()=>{ muted=!muted; muteBtn.textContent=muted?"소리 꺼짐":"소리 켜짐"; muteBtn.classList.toggle("off",muted); if (audioReady) master.gain.setTargetAtTime(muted?0:0.9,AC.currentTime,0.05); });
+
+  window.addEventListener("resize",resize);
+  resize();
+
+  // 어떤 첫 제스처에서도 오디오 unlock 보강(모바일)
+  const armUnlock=()=>{ initAudio(); unlockAudio(); primeSilent(); };
+  window.addEventListener("touchend", armUnlock, {passive:true});
+  window.addEventListener("pointerdown", armUnlock, {passive:true});
+  window.addEventListener("click", armUnlock);
+  document.addEventListener("visibilitychange", ()=>{ if(!document.hidden) unlockAudio(); });
+
+  // 프리렌더 워밍업(캡처 검증용, ?warm=초 [&puff]): 동기로 시뮬 진행 후 1회 렌더
+  const q = new URLSearchParams(location.search);
+  if (q.has("warm")){
+    if (q.has("type") && TYPES[q.get("type")]) setType(q.get("type"));
+    if (q.has("weather")) setWeather(q.get("weather"));
+    if (!q.has("unlit")){ cig.lit=true; cig.heat=0.42; }   // 검증용: 기본 점화(?unlit=1로 미점화 확인)
+    let tt=0; const sec=parseFloat(q.get("warm"))||3;
+    for (; tt<sec; tt+=1/60) update(1/60, tt);
+    if (q.has("burn")){ cig.drawing=true; const bs=parseFloat(q.get("burn"))||4; for(let e2=0;e2<bs;e2+=1/60){ update(1/60,tt); tt+=1/60; } cig.drawing=false; for(let e3=0;e3<1.5;e3+=1/60){ update(1/60,tt); tt+=1/60; } }
+    if (q.has("puff")){ exhale(1200/14); const ex=parseFloat(q.get("puff"))||2.5; for (let e2=0;e2<ex;e2+=1/60){ update(1/60,tt); tt+=1/60; } }
+    (function redraw(){ drawBg(); drawAshtray(); drawButts(); drawAshBits(); drawCigScene(); drawSparks(); drawSmoke(); drawRain(); drawSnow(); requestAnimationFrame(redraw); })();
+  } else {
+    requestAnimationFrame(frame);
+  }
+})();
+</script>
