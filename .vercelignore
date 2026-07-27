@@ -1,0 +1,6 @@
+# Vercel 정적 배포에는 앱인토스 번들 래퍼가 필요 없다.
+# 이게 없으면 ait/package.json 때문에 Vercel이 빌드를 시도한다.
+ait/
+assets/
+cigarette.html
+build.js

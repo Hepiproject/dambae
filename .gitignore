@@ -8,3 +8,9 @@ node_modules/
 .env*
 HANDOFF.md
 앱인토스_입점_검토.md
+
+# 앱인토스 번들 래퍼 — 산출물은 커밋하지 않는다(ait build 로 재생성)
+ait/node_modules/
+ait/dist/
+ait/*.ait
+ait/.granite/

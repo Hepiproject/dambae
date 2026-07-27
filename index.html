@@ -26,7 +26,13 @@
     touch-action:none; cursor:pointer;
   }
   #stage { position:fixed; inset:0; width:100vw; height:100vh; display:block; }
-  .hud { position:fixed; inset:0; pointer-events:none; z-index:2; }
+  /* HUD는 Safe Area 안쪽에만 놓는다. 자식이 absolute라 padding box가 기준이 된다.
+     노치·홈 인디케이터와 앱인토스 내비게이션 바 침범을 막는다(viewport-fit=cover 전제). */
+  .hud {
+    position:fixed; inset:0; pointer-events:none; z-index:2;
+    padding:env(safe-area-inset-top) env(safe-area-inset-right)
+            env(safe-area-inset-bottom) env(safe-area-inset-left);
+  }
 
   .hint {
     position:absolute; left:0; right:0; top:50%; transform:translateY(-50%); text-align:center;
@@ -796,7 +802,6 @@
     audioReady=true;
     applyAmbientGains();
     unlockAudio();
-    primeSilent();   // iOS 무음 스위치 우회(미디어 세션 전환)
   }
   function unlockAudio(){
     if(!AC) return;
@@ -805,20 +810,9 @@
     try{ const b=AC.createBuffer(1,1,AC.sampleRate); const s=AC.createBufferSource(); s.buffer=b; s.connect(AC.destination); s.start(0); }catch(e){}
   }
   function resumeAudio(){ unlockAudio(); }
-  // iOS 무음(벨/무음) 스위치에서도 Web Audio가 나오도록 무음 오디오로 미디어 세션 전환
-  let silentEl=null;
-  function primeSilent(){
-    try{
-      if(!silentEl){
-        const sr=8000, sec=1, n=sr*sec, buf=new ArrayBuffer(44+n*2), v=new DataView(buf);
-        const ws=(o,s)=>{ for(let i=0;i<s.length;i++) v.setUint8(o+i,s.charCodeAt(i)); };
-        ws(0,"RIFF"); v.setUint32(4,36+n*2,true); ws(8,"WAVE"); ws(12,"fmt "); v.setUint32(16,16,true); v.setUint16(20,1,true); v.setUint16(22,1,true); v.setUint32(24,sr,true); v.setUint32(28,sr*2,true); v.setUint16(32,2,true); v.setUint16(34,16,true); ws(36,"data"); v.setUint32(40,n*2,true);
-        const u8=new Uint8Array(buf); let bin=""; for(let i=0;i<u8.length;i++) bin+=String.fromCharCode(u8[i]);
-        silentEl=new Audio("data:audio/wav;base64,"+btoa(bin)); silentEl.loop=true; silentEl.volume=1; silentEl.setAttribute("playsinline","");
-      }
-      const p=silentEl.play(); if(p&&p.catch) p.catch(()=>{});
-    }catch(e){}
-  }
+  // 기기 무음·진동 모드를 그대로 따른다.
+  // 종전에는 무음 WAV를 루프 재생해 iOS 무음 스위치를 우회했으나,
+  // 앱인토스 검수 기준(무음 모드에서 소리가 나면 안 됨)에 어긋나 제거했다.
   function crackle(){
     if (!audioReady||muted) return; const now=AC.currentTime;
     const src=AC.createBufferSource(); src.buffer=noiseBuf; src.playbackRate.value=0.8+Math.random()*0.7;
@@ -1042,7 +1036,7 @@
   resize();
 
   // 어떤 첫 제스처에서도 오디오 unlock 보강(모바일)
-  const armUnlock=()=>{ initAudio(); unlockAudio(); primeSilent(); };
+  const armUnlock=()=>{ initAudio(); unlockAudio(); };
   window.addEventListener("touchend", armUnlock, {passive:true});
   window.addEventListener("pointerdown", armUnlock, {passive:true});
   window.addEventListener("click", armUnlock);
