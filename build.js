@@ -5,6 +5,7 @@
 // 실행:  node build.js   (그 뒤 og.png 는 별도 생성/유지)
 const fs = require("fs");
 let s = fs.readFileSync("cigarette.html", "utf8");
+s = s.replace(/\r\n/g, "\n");   // core.autocrlf=true 환경 대응. 아래 치환 정규식이 LF 전제임
 
 s = s.replace(/\n\s*\/\/ 실사 밤하늘 배경[^\n]*\n\s*const BG = "[^"]*";\n\s*const bgImg = new Image\(\)[^\n]*\n/, "\n");
 s = s.replace(/\n\s*\/\/ 프리렌더 워밍업[\s\S]*?\} else \{\n\s*requestAnimationFrame\(frame\);\n\s*\}\n/, "\n  requestAnimationFrame(frame);\n");

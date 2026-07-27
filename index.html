@@ -98,11 +98,11 @@
 <canvas id="stage"></canvas>
 <div class="hud">
   <div class="picker" id="picker">
-    <button class="pick-btn" id="pickBtn" aria-haspopup="true" aria-expanded="false">담배 선택 · 에쎄</button>
+    <button class="pick-btn" id="pickBtn" aria-haspopup="true" aria-expanded="false">담배 선택 · 에쉐</button>
     <div class="menu" id="menu" hidden>
-      <button data-t="esse" class="active">에쎄</button>
-      <button data-t="masse">마쎄</button>
-      <button data-t="marlboro">말보로</button>
+      <button data-t="esse" class="active">에쉐</button>
+      <button data-t="masse">마쉐</button>
+      <button data-t="marlboro">말볼오</button>
       <button data-t="cigar">시가</button>
     </div>
   </div>
@@ -125,9 +125,9 @@
   const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
   const TYPES = {
-    esse:     { label:"에쎄",   wNear:15, lenK:0.84, filterK:0.30, wrap:"paper", filter:"white", band:null,     burn:1.05 },
-    masse:    { label:"마쎄",   wNear:23, lenK:0.82, filterK:0.28, wrap:"paper", filter:"white", band:"silver", logo:"#2b6fd6", burn:1.0 },
-    marlboro: { label:"말보로", wNear:38, lenK:0.80, filterK:0.26, wrap:"paper", filter:"cork",  band:"gold",   burn:0.9 },
+    esse:     { label:"에쉐",   wNear:15, lenK:0.84, filterK:0.30, wrap:"paper", filter:"white", band:null,     burn:1.05 },
+    masse:    { label:"마쉐",   wNear:23, lenK:0.82, filterK:0.28, wrap:"paper", filter:"white", band:"silver", logo:"#2b6fd6", burn:1.0 },
+    marlboro: { label:"말볼오", wNear:38, lenK:0.80, filterK:0.26, wrap:"paper", filter:"cork",  band:"gold",   burn:0.9 },
     cigar:    { label:"시가",   wNear:60, lenK:0.80, filterK:0.14, wrap:"cigar", filter:"cap",   band:"cigar",  burn:0.45 },
   };
   const TAPER = 0.18;
@@ -626,7 +626,7 @@
         for (let i=0;i<24;i++){ const sx=-cig.hwNear+Math.abs(Math.sin(i*12.9))*cig.hwNear*2, sy=-Math.abs(Math.sin(i*7.7))*dF; ctx.beginPath(); ctx.arc(sx,sy,0.8,0,7); ctx.fill(); }
         ctx.restore();
       } else {
-        // 흰색 필터(에쎄·메비우스)
+        // 흰색 필터(에쉐·마쉐 계열)
         tapered(0,dF,"#d7d8db","#eef0f2","#ffffff");
       }
       // 종이(밴드보다 먼저)
