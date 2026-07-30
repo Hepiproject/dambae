@@ -5,7 +5,8 @@ export default defineConfig({
   brand: {
     displayName: '담배 한 대',
     primaryColor: '#1B64DA',
-    icon: '',
+    // 콘솔에 등록한 앱 로고와 동일해야 한다. 다르면 검수에서 자동 반려된다.
+    icon: 'https://static.toss.im/appsintoss/63235/b936c9d4-0ac2-44e7-9300-5a76ce5f0ee6.png',
   },
   web: {
     host: 'localhost',
