@@ -14,3 +14,8 @@ ait/node_modules/
 ait/dist/
 ait/*.ait
 ait/.granite/
+
+# iOS 래퍼 — XcodeGen 산출물·빌드물은 커밋하지 않는다(xcodegen generate 로 재생성)
+ios/Dambae.xcodeproj/
+ios/Dambae/Info.plist
+ios/build/
