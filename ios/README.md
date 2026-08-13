@@ -25,3 +25,16 @@ open Dambae.xcodeproj
 ## 배포
 - Bundle ID: `com.brandnewlegacy.dambae`
 - Team: `CTV7Z5BXL8`
+
+## 스토어 스크린샷
+```bash
+node ios/Screenshots/build-scene.js     # cigarette.html + charset 헤드 → scene.html (gitignore)
+xcodegen generate && xcodebuild ... -configuration Debug build
+SIMCTL_CHILD_DAMBAE_SCENE="warm=5&weather=night&type=esse&puff=2.5" \
+  xcrun simctl launch <sim> com.brandnewlegacy.dambae
+xcrun simctl io <sim> screenshot out.png
+```
+- iPhone 17 Pro Max 시뮬레이터가 6.9"(1320×2868) 규격을 그대로 뱉는다.
+- 론치 직후 캡처하면 빈 화면이 찍힌다. 6초 정도 기다린다.
+- `cigarette.html` 을 직접 번들하면 `<meta charset>` 이 없어 한글이 깨진다. 반드시 build-scene.js 를 거친다.
+- `scene.html` 은 DEBUG 에서만 로드되나 리소스 자체는 Release 에도 포함된다(동작 영향 없음).

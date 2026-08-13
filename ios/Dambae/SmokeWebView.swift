@@ -37,11 +37,29 @@ struct SmokeWebView: UIViewRepresentable {
         // 한 대 태우는 동안 화면이 꺼지면 안 된다.
         UIApplication.shared.isIdleTimerDisabled = true
 
-        if let url = Bundle.main.url(forResource: "index", withExtension: "html") {
-            webView.loadFileURL(url, allowingReadAccessTo: url.deletingLastPathComponent())
-        }
+        load(into: webView)
         return webView
     }
 
     func updateUIView(_ webView: WKWebView, context: Context) {}
+
+    /// 평소엔 빌드 산출물 index.html 을 띄운다.
+    /// 스토어 스크린샷을 찍을 때만 촬영용 scene.html 의 ?warm 프리렌더 훅을 쓴다.
+    ///   xcrun simctl launch --setenv DAMBAE_SCENE "warm=6&weather=rain&puff=2" <sim> com.brandnewlegacy.dambae
+    private func load(into webView: WKWebView) {
+        #if DEBUG
+            if let scene = ProcessInfo.processInfo.environment["DAMBAE_SCENE"],
+                let source = Bundle.main.url(forResource: "scene", withExtension: "html"),
+                let url = URL(string: "\(source.absoluteString)?\(scene)")
+            {
+                // loadFileURL 은 쿼리를 버린다. loadFileRequest 는 유지한다.
+                webView.loadFileRequest(
+                    URLRequest(url: url),
+                    allowingReadAccessTo: source.deletingLastPathComponent())
+                return
+            }
+        #endif
+        guard let url = Bundle.main.url(forResource: "index", withExtension: "html") else { return }
+        webView.loadFileURL(url, allowingReadAccessTo: url.deletingLastPathComponent())
+    }
 }

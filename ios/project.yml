@@ -21,6 +21,10 @@ targets:
       # 웹 정본은 레포 루트의 index.html 하나다. 복사본을 두면 갈라지므로 직접 번들한다.
       - path: ../index.html
         buildPhase: resources
+      # 스토어 스크린샷 촬영용 씬(?warm 프리렌더 훅 유지). DEBUG 에서만 로드한다.
+      # Screenshots/build-scene.js 로 생성한다.
+      - path: Screenshots/scene.html
+        buildPhase: resources
     info:
       path: Dambae/Info.plist
       properties:
